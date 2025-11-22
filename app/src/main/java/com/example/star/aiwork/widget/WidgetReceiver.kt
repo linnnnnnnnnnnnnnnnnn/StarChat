@@ -19,8 +19,22 @@ package com.example.star.aiwork.widget
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 
+/**
+ * Glance 应用小部件的接收器 (Receiver)。
+ *
+ * 这是一个 BroadcastReceiver，用于处理 App Widget 的生命周期事件。
+ * 必须在 AndroidManifest.xml 中注册。
+ *
+ * [GlanceAppWidgetReceiver] 是 Glance 提供的辅助类，
+ * 它简化了将广播事件连接到 [GlanceAppWidget] 的过程。
+ */
 class WidgetReceiver : GlanceAppWidgetReceiver() {
 
+    /**
+     * 指定此接收器关联的 GlanceAppWidget 实例。
+     *
+     * 当接收器接收到更新请求时，它会使用此小部件类来生成新的 UI。
+     */
     override val glanceAppWidget: GlanceAppWidget
         get() = JetChatWidget()
 }

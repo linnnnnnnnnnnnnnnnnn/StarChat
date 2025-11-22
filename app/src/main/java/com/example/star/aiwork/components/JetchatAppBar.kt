@@ -34,6 +34,21 @@ import androidx.compose.ui.unit.dp
 import com.example.star.aiwork.R
 import com.example.star.aiwork.theme.JetchatTheme
 
+/**
+ * Jetchat 应用的通用顶部应用栏 (TopAppBar)。
+ *
+ * 它是一个居中对齐的顶部应用栏，包含：
+ * - 一个导航图标 (Jetchat Logo)，点击可触发侧边栏或其他导航动作。
+ * - 一个可组合的标题。
+ * - 可选的操作按钮区域。
+ * - 支持滚动行为 (ScrollBehavior)。
+ *
+ * @param modifier 应用于 TopAppBar 的修饰符。
+ * @param scrollBehavior 顶部应用栏的滚动行为，例如随内容滚动而折叠。
+ * @param onNavIconPressed 当导航图标被点击时的回调。
+ * @param title 标题内容的 Composable lambda。
+ * @param actions 操作区域 (通常是图标按钮) 的 Composable lambda。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JetchatAppBar(
@@ -60,6 +75,9 @@ fun JetchatAppBar(
     )
 }
 
+/**
+ * 亮色主题下的预览。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview
 @Composable
@@ -69,6 +87,9 @@ fun JetchatAppBarPreview() {
     }
 }
 
+/**
+ * 暗色主题下的预览。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Preview
 @Composable

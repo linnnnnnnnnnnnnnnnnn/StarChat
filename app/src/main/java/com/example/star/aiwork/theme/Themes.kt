@@ -28,6 +28,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+/**
+ * Jetchat 的暗色配色方案。
+ *
+ * 为 Material 3 的 darkColorScheme 定义特定的颜色映射。
+ */
 val JetchatDarkColorScheme = darkColorScheme(
     primary = Blue80,
     onPrimary = Blue20,
@@ -57,6 +62,11 @@ val JetchatDarkColorScheme = darkColorScheme(
     outline = BlueGrey60,
 )
 
+/**
+ * Jetchat 的亮色配色方案。
+ *
+ * 为 Material 3 的 lightColorScheme 定义特定的颜色映射。
+ */
 val JetchatLightColorScheme = lightColorScheme(
     primary = Blue40,
     onPrimary = Color.White,
@@ -86,18 +96,33 @@ val JetchatLightColorScheme = lightColorScheme(
     outline = BlueGrey50,
 )
 
+/**
+ * Jetchat 应用的主题入口 Composable。
+ *
+ * 该函数根据系统设置（暗色模式、动态取色）应用相应的主题。
+ *
+ * @param isDarkTheme 是否使用暗色主题，默认跟随系统设置。
+ * @param isDynamicColor 是否启用动态取色 (Android 12+)，默认启用。
+ * @param content 主题内部的 Composable 内容。
+ */
 @SuppressLint("NewApi")
 @Composable
 fun JetchatTheme(isDarkTheme: Boolean = isSystemInDarkTheme(), isDynamicColor: Boolean = true, content: @Composable () -> Unit) {
+    // 动态取色仅在 Android 12 (S) 及以上版本可用
     val dynamicColor = isDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    
     val myColorScheme = when {
+        // 使用系统动态暗色方案
         dynamicColor && isDarkTheme -> {
             dynamicDarkColorScheme(LocalContext.current)
         }
+        // 使用系统动态亮色方案
         dynamicColor && !isDarkTheme -> {
             dynamicLightColorScheme(LocalContext.current)
         }
+        // 使用 Jetchat 自定义暗色方案
         isDarkTheme -> JetchatDarkColorScheme
+        // 使用 Jetchat 自定义亮色方案
         else -> JetchatLightColorScheme
     }
 

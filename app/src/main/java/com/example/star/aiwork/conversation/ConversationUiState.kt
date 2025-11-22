@@ -26,25 +26,45 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.star.aiwork.R
 
+/**
+ * 对话屏幕的 UI 状态容器。
+ *
+ * 管理对话界面的所有可变状态，包括消息列表、输入框状态、录音状态以及 AI 模型参数。
+ *
+ * @property channelName 频道名称。
+ * @property channelMembers 频道成员数量。
+ * @property initialMessages 初始消息列表。
+ */
 class ConversationUiState(
     val channelName: String, 
     val channelMembers: Int, 
     initialMessages: List<Message>
 ) {
+    // 使用 SnapshotStateList 来存储消息，确保列表变更时能触发 Compose 重组
     private val _messages: MutableList<Message> = initialMessages.toMutableStateList()
     val messages: List<Message> = _messages
 
+    // AI 模型参数状态
     var temperature: Float by mutableFloatStateOf(0.7f)
     var maxTokens: Int by mutableIntStateOf(2000)
     var streamResponse: Boolean by mutableStateOf(true)
 
+    // 录音状态
     var isRecording: Boolean by mutableStateOf(false)
+    // 输入框文本状态
     var textFieldValue: TextFieldValue by mutableStateOf(TextFieldValue())
 
+    /**
+     * 添加一条新消息到列表顶部。
+     */
     fun addMessage(msg: Message) {
         _messages.add(0, msg) // Add to the beginning of the list
     }
 
+    /**
+     * 将内容追加到最新一条消息中。
+     * 通常用于流式显示 AI 的回复。
+     */
     fun appendToLastMessage(content: String) {
         if (_messages.isNotEmpty()) {
             val lastMsg = _messages[0]
@@ -53,6 +73,18 @@ class ConversationUiState(
     }
 }
 
+/**
+ * 消息数据模型。
+ *
+ * 表示聊天中的单条消息。
+ * 标记为 @Immutable 以优化 Compose 重组性能。
+ *
+ * @property author 消息作者名称。
+ * @property content 消息文本内容。
+ * @property timestamp 消息时间戳字符串。
+ * @property image 可选的附件图片资源 ID。
+ * @property authorImage 作者头像资源 ID。
+ */
 @Immutable
 data class Message(
     val author: String,

@@ -30,40 +30,49 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
 
-// Regex containing the syntax tokens
+// 包含语法标记的正则表达式
+// 匹配：URL链接, `代码块`, @用户, *加粗*, _斜体_, ~删除线~
 val symbolPattern by lazy {
     Regex("""(https?://[^\s\t\n]+)|(`[^`]+`)|(@\w+)|(\*[\w]+\*)|(_[\w]+_)|(~[\w]+~)""")
 }
 
-// Accepted annotations for the ClickableTextWrapper
+// ClickableTextWrapper 接受的注解类型枚举
 enum class SymbolAnnotationType {
-    PERSON,
-    LINK,
+    PERSON, // 用户提及
+    LINK,   // URL 链接
 }
+
+// 字符串注解类型的别名，表示 AnnotatedString 中的一段范围
 typealias StringAnnotation = AnnotatedString.Range<String>
-// Pair returning styled content and annotation for ClickableText when matching syntax token
+
+// 匹配语法标记时返回的对，包含带样式的文本内容和可选的注解
 typealias SymbolAnnotation = Pair<AnnotatedString, StringAnnotation?>
 
 /**
- * Format a message following Markdown-lite syntax
- * | @username -> bold, primary color and clickable element
- * | http(s)://... -> clickable link, opening it into the browser
- * | *bold* -> bold
- * | _italic_ -> italic
- * | ~strikethrough~ -> strikethrough
- * | `MyClass.myMethod` -> inline code styling
+ * 按照 Markdown-lite 语法格式化消息
  *
- * @param text contains message to be parsed
- * @return AnnotatedString with annotations used inside the ClickableText wrapper
+ * 支持的格式：
+ * | @username -> 加粗，使用主色调，且为可点击元素
+ * | http(s)://... -> 可点击链接，在浏览器中打开
+ * | *bold* -> 加粗
+ * | _italic_ -> 斜体
+ * | ~strikethrough~ -> 删除线
+ * | `MyClass.myMethod` -> 内联代码样式
+ *
+ * @param text 要解析的消息文本
+ * @param primary 是否为主要消息（通常指发送者的消息），影响颜色选择
+ * @return 带有注解的 AnnotatedString，用于 ClickableText wrapper
  */
 @Composable
 fun messageFormatter(text: String, primary: Boolean): AnnotatedString {
+    // 查找所有匹配的语法标记
     val tokens = symbolPattern.findAll(text)
 
     return buildAnnotatedString {
 
         var cursorPosition = 0
 
+        // 根据消息类型（主要/次要）确定代码块的背景颜色
         val codeSnippetBackground =
             if (primary) {
                 MaterialTheme.colorScheme.secondary
@@ -72,8 +81,10 @@ fun messageFormatter(text: String, primary: Boolean): AnnotatedString {
             }
 
         for (token in tokens) {
+            // 追加当前标记之前的普通文本
             append(text.slice(cursorPosition until token.range.first))
 
+            // 获取标记对应的带样式文本和注解
             val (annotatedString, stringAnnotation) = getSymbolAnnotation(
                 matchResult = token,
                 colorScheme = MaterialTheme.colorScheme,
@@ -82,6 +93,7 @@ fun messageFormatter(text: String, primary: Boolean): AnnotatedString {
             )
             append(annotatedString)
 
+            // 如果有注解（如链接或用户提及），则添加到 AnnotatedString 中
             if (stringAnnotation != null) {
                 val (item, start, end, tag) = stringAnnotation
                 addStringAnnotation(tag = tag, start = start, end = end, annotation = item)
@@ -90,6 +102,7 @@ fun messageFormatter(text: String, primary: Boolean): AnnotatedString {
             cursorPosition = token.range.last + 1
         }
 
+        // 追加剩余的文本
         if (!tokens.none()) {
             append(text.slice(cursorPosition..text.lastIndex))
         } else {
@@ -99,10 +112,13 @@ fun messageFormatter(text: String, primary: Boolean): AnnotatedString {
 }
 
 /**
- * Map regex matches found in a message with supported syntax symbols
+ * 将正则表达式匹配结果映射为支持的语法符号样式
  *
- * @param matchResult is a regex result matching our syntax symbols
- * @return pair of AnnotatedString with annotation (optional) used inside the ClickableText wrapper
+ * @param matchResult 正则表达式匹配结果
+ * @param colorScheme 当前主题颜色方案
+ * @param primary 是否为主要消息
+ * @param codeSnippetBackground 代码块背景颜色
+ * @return 一个 Pair，包含带样式的 AnnotatedString 和可选的注解（用于 ClickableText wrapper）
  */
 private fun getSymbolAnnotation(
     matchResult: MatchResult,
@@ -120,7 +136,7 @@ private fun getSymbolAnnotation(
                 ),
             ),
             StringAnnotation(
-                item = matchResult.value.substring(1),
+                item = matchResult.value.substring(1), // 去掉 @ 符号
                 start = matchResult.range.first,
                 end = matchResult.range.last,
                 tag = SymbolAnnotationType.PERSON.name,

@@ -28,8 +28,18 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import com.example.star.aiwork.R
 
+/**
+ * Jetchat 应用程序的品牌图标组件。
+ *
+ * 该图标由两部分组成：背景和前景，叠加在一起形成完整的 Logo。
+ * 支持通过 Semantics 设置内容描述，用于无障碍功能。
+ *
+ * @param contentDescription 用于无障碍服务的图标描述。如果为 null，则不设置语义信息。
+ * @param modifier 应用于图标容器的修饰符。
+ */
 @Composable
 fun JetchatIcon(contentDescription: String?, modifier: Modifier = Modifier) {
+    // 配置语义属性（如果提供了 contentDescription）
     val semantics = if (contentDescription != null) {
         Modifier.semantics {
             this.contentDescription = contentDescription
@@ -38,12 +48,15 @@ fun JetchatIcon(contentDescription: String?, modifier: Modifier = Modifier) {
     } else {
         Modifier
     }
+    // 使用 Box 将两个图标层叠在一起
     Box(modifier = modifier.then(semantics)) {
+        // 背景层图标
         Icon(
             painter = painterResource(id = R.drawable.ic_jetchat_back),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primaryContainer,
         )
+        // 前景层图标
         Icon(
             painter = painterResource(id = R.drawable.ic_jetchat_front),
             contentDescription = null,

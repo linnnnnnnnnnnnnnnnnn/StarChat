@@ -42,30 +42,47 @@ import com.example.star.aiwork.databinding.ContentMainBinding
 import kotlinx.coroutines.launch
 
 /**
- * Main activity for the app.
+ * 应用程序的主 Activity。
+ *
+ * 这是一个混合架构的 Activity：
+ * - 它继承自 [AppCompatActivity] 来支持传统的 Android 组件和 Navigation Component。
+ * - 它使用 [ComposeView] 作为根视图，并包含了一个 [JetchatDrawer] (Compose 实现的侧滑菜单)。
+ * - 侧滑菜单的内容使用 [AndroidViewBinding] 包裹了一个传统的 XML 布局 (`ContentMainBinding`)，
+ *   其中包含一个 `NavHostFragment` 用于基于 Fragment 的导航。
+ *
+ * 这种结构展示了如何在一个应用中同时使用 Jetpack Compose 和传统的 View 系统。
  */
 class NavActivity : AppCompatActivity() {
-    private val viewModel: MainViewModel by viewModels()
+    // 懒加载 ViewModel，使用自定义 Factory
+    private val viewModel: MainViewModel by viewModels { MainViewModel.Factory }
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 启用全面屏边缘到边缘显示
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // 处理窗口内边距，确保内容不会被系统栏遮挡
         ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets -> insets }
 
         setContentView(
             ComposeView(this).apply {
+                // 禁用 ComposeView 自动消费窗口内边距，交由内部组件处理
                 consumeWindowInsets = false
                 setContent {
+                    // 记住侧滑菜单的状态 (打开/关闭)
                     val drawerState = rememberDrawerState(initialValue = Closed)
+                    // 从 ViewModel 收集是否应该打开菜单的状态
                     val drawerOpen by viewModel.drawerShouldBeOpened
                         .collectAsStateWithLifecycle()
 
+                    // 记录当前选中的菜单项
                     var selectedMenu by remember { mutableStateOf("composers") }
+
+                    // 监听 ViewModel 中的打开菜单请求
                     if (drawerOpen) {
-                        // Open drawer and reset state in VM.
+                        // 打开菜单并在 ViewModel 中重置状态
                         LaunchedEffect(Unit) {
-                            // wrap in try-finally to handle interruption whiles opening drawer
+                            // 使用 try-finally 包装以处理打开菜单时的中断情况
                             try {
                                 drawerState.open()
                             } finally {
@@ -74,12 +91,15 @@ class NavActivity : AppCompatActivity() {
                         }
                     }
 
+                    // 协程作用域，用于处理 UI 事件中的挂起函数 (如关闭菜单)
                     val scope = rememberCoroutineScope()
 
+                    // 使用 Compose 实现的侧滑菜单布局
                     JetchatDrawer(
                         drawerState = drawerState,
                         selectedMenu = selectedMenu,
                         onChatClicked = {
+                            // 导航回主页聊天界面
                             findNavController().popBackStack(R.id.nav_home, false)
                             scope.launch {
                                 drawerState.close()
@@ -87,6 +107,7 @@ class NavActivity : AppCompatActivity() {
                             selectedMenu = it
                         },
                         onProfileClicked = {
+                            // 导航到个人资料界面，并传递 userId
                             val bundle = bundleOf("userId" to it)
                             findNavController().navigate(R.id.nav_profile, bundle)
                             scope.launch {
@@ -95,6 +116,7 @@ class NavActivity : AppCompatActivity() {
                             selectedMenu = it
                         },
                     ) {
+                        // 侧滑菜单的主要内容区域：嵌入基于 XML 的 Fragment 导航
                         AndroidViewBinding(ContentMainBinding::inflate)
                     }
                 }
@@ -102,12 +124,20 @@ class NavActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * 处理向上导航 (返回) 操作。
+     *
+     * 委托给 Navigation Controller 处理。
+     */
     override fun onSupportNavigateUp(): Boolean {
         return findNavController().navigateUp() || super.onSupportNavigateUp()
     }
 
     /**
-     * See https://issuetracker.google.com/142847973
+     * 查找 NavController。
+     *
+     * 这是一个辅助方法，用于解决直接查找 NavHostFragment 的一些已知问题。
+     * 参见 https://issuetracker.google.com/142847973
      */
     private fun findNavController(): NavController {
         val navHostFragment =

@@ -22,6 +22,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
+/**
+ * 显示一个简单的弹出窗口，通知用户该功能目前不可用。
+ *
+ * 这是一个通用的占位符 UI，用于处理尚未实现的功能点击事件。
+ *
+ * @param onDismiss 当用户点击关闭按钮或点击对话框外部时触发的回调。
+ */
 @Composable
 fun FunctionalityNotAvailablePopup(onDismiss: () -> Unit) {
     AlertDialog(

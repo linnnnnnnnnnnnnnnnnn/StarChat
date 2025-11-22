@@ -76,8 +76,10 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -107,6 +109,7 @@ import androidx.core.content.ContextCompat
 import com.example.star.aiwork.FunctionalityNotAvailablePopup
 import com.example.star.aiwork.R
 import com.example.star.aiwork.ai.core.MessageRole
+import com.example.star.aiwork.ai.provider.ProviderSetting
 import com.example.star.aiwork.ai.provider.TextGenerationParams
 import com.example.star.aiwork.ai.provider.providers.OpenAIProvider
 import com.example.star.aiwork.ai.ui.UIMessage
@@ -114,7 +117,6 @@ import com.example.star.aiwork.ai.ui.UIMessagePart
 import com.example.star.aiwork.ai.util.AIRequestInterceptor
 import com.example.star.aiwork.components.JetchatAppBar
 import com.example.star.aiwork.data.exampleUiState
-import com.example.star.aiwork.data.freeProviders
 import com.example.star.aiwork.theme.JetchatTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -123,12 +125,23 @@ import okhttp3.OkHttpClient
 import kotlin.math.roundToInt
 
 /**
- * Entry point for a conversation screen.
+ * 对话屏幕的入口点。
  *
- * @param uiState [ConversationUiState] that contains messages to display
- * @param navigateToProfile User action when navigation to a profile is requested
- * @param modifier [Modifier] to apply to this layout node
- * @param onNavIconPressed Sends an event up when the user clicks on the menu
+ * 这个可组合函数协调主要的对话 UI，包括：
+ * - 显示消息历史记录。
+ * - 处理用户输入（文本和语音）。
+ * - 管理 AI 模型交互（文本生成）。
+ * - 处理设置对话框和导航。
+ *
+ * @param uiState [ConversationUiState] 包含要显示的消息和 UI 状态。
+ * @param navigateToProfile 请求导航到用户个人资料时的回调。
+ * @param modifier 应用于此布局节点的 [Modifier]。
+ * @param onNavIconPressed 当按下导航图标（汉堡菜单）时的回调。
+ * @param providerSettings 可用的 AI 提供商设置列表。
+ * @param temperature 当前的 AI 文本生成温度设置 (0.0 - 2.0)。
+ * @param maxTokens 生成的最大 Token 数。
+ * @param streamResponse 是否流式传输 AI 响应或等待完整响应。
+ * @param onUpdateSettings 更新模型设置（温度、最大 Token 数、流式响应）的回调。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -137,18 +150,34 @@ fun ConversationContent(
     navigateToProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
     onNavIconPressed: () -> Unit = { },
+    providerSettings: List<ProviderSetting> = emptyList(),
+    temperature: Float = 0.7f,
+    maxTokens: Int = 2000,
+    streamResponse: Boolean = true,
+    onUpdateSettings: (Float, Int, Boolean) -> Unit = { _, _, _ -> }
 ) {
     val authorMe = stringResource(R.string.author_me)
     val timeNow = stringResource(id = R.string.now)
     val context = LocalContext.current
 
+    // 列表滚动和顶部应用栏行为的状态
     val scrollState = rememberLazyListState()
     val topBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topBarState)
     val scope = rememberCoroutineScope()
     
+    // 显示模型设置对话框的状态
     var showSettingsDialog by remember { mutableStateOf(false) }
+    
+    // 将从 ViewModel 传递的参数与 UiState 同步
+    // 这确保了 UI 反映持久化的设置
+    LaunchedEffect(temperature, maxTokens, streamResponse) {
+        uiState.temperature = temperature
+        uiState.maxTokens = maxTokens
+        uiState.streamResponse = streamResponse
+    }
 
+    // 拖放视觉状态
     var background by remember {
         mutableStateOf(Color.Transparent)
     }
@@ -157,13 +186,19 @@ fun ConversationContent(
         mutableStateOf(Color.Transparent)
     }
     
+    // 如果请求，显示模型设置对话框
     if (showSettingsDialog) {
         ModelSettingsDialog(
             uiState = uiState,
-            onDismissRequest = { showSettingsDialog = false }
+            onDismissRequest = { 
+                // 当对话框关闭时保存设置
+                onUpdateSettings(uiState.temperature, uiState.maxTokens, uiState.streamResponse)
+                showSettingsDialog = false 
+            }
         )
     }
 
+    // 拖放回调处理
     val dragAndDropCallback = remember {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
@@ -173,6 +208,7 @@ fun ConversationContent(
                     return false
                 }
 
+                // 将拖放的文本添加为新消息
                 uiState.addMessage(
                     Message(authorMe, clipData.getItemAt(0).text.toString(), timeNow),
                 )
@@ -203,29 +239,48 @@ fun ConversationContent(
         }
     }
 
-    // Initialize OpenAI Provider
+    // 初始化带有 OkHttp 客户端的 OpenAI 提供商
     val client = remember {
         OkHttpClient.Builder()
             .addInterceptor(AIRequestInterceptor())
             .build()
     }
     val provider = remember { OpenAIProvider(client) }
-    // Use the first free provider (SiliconFlow) for testing. Ensure freeProviders is not empty.
-    val providerSetting = remember { freeProviders.firstOrNull() }
-    val model = remember { providerSetting?.models?.firstOrNull() }
+    
+    // 选择第一个可用的提供商和模型进行演示
+    // 在实际应用中，这应该由用户选择
+    val providerSetting = remember(providerSettings) { providerSettings.firstOrNull() }
+    val model = remember(providerSetting) { providerSetting?.models?.firstOrNull() }
 
-    // Initialize Audio Recorder and WebSocket
+    // 初始化用于语音转文本的音频录制器和 WebSocket
     val audioRecorder = remember { AudioRecorder(context) }
+    
+    // 跟踪挂起的部分文本长度，以便在实时转录期间正确替换它
+    var lastPartialLength by remember { mutableIntStateOf(0) }
+    
+    // 处理 ASR 结果的转录监听器
     val transcriptionListener = remember(scope, uiState) {
         object : YoudaoWebSocket.TranscriptionListener {
-            override fun onResult(text: String) {
+            override fun onResult(text: String, isFinal: Boolean) {
                 scope.launch(Dispatchers.Main) {
                     val currentText = uiState.textFieldValue.text
-                    val newText = currentText + text
+                    
+                    // 删除以前的部分文本（如果有），以便使用新的部分或最终结果进行更新
+                    val safeCurrentText = if (currentText.length >= lastPartialLength) {
+                        currentText.substring(0, currentText.length - lastPartialLength)
+                    } else {
+                        currentText // 通常不应该发生
+                    }
+                    
+                    val newText = safeCurrentText + text
+                    
                     uiState.textFieldValue = uiState.textFieldValue.copy(
                         text = newText,
                         selection = TextRange(newText.length)
                     )
+                    
+                    // 更新 lastPartialLength：如果是最终结果，重置为 0，否则存储当前长度
+                    lastPartialLength = if (isFinal) 0 else text.length
                 }
             }
 
@@ -239,7 +294,7 @@ fun ConversationContent(
     }
     val youdaoWebSocket = remember { YoudaoWebSocket(transcriptionListener) }
 
-    // Permission Launcher
+    // 音频录制的权限启动器
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -248,6 +303,7 @@ fun ConversationContent(
         }
     }
 
+    // 在 dispose 时清理资源
     DisposableEffect(Unit) {
         onDispose {
             youdaoWebSocket.close()
@@ -265,7 +321,7 @@ fun ConversationContent(
                 onSettingsClicked = { showSettingsDialog = true }
             )
         },
-        // Exclude ime and navigation bar padding so this can be added by the UserInput composable
+        // 排除 ime 和导航栏内边距，以便由 UserInput composable 添加
         contentWindowInsets = ScaffoldDefaults
             .contentWindowInsets
             .exclude(WindowInsets.navigationBars)
@@ -284,38 +340,49 @@ fun ConversationContent(
                         )
                 }, target = dragAndDropCallback),
         ) {
+            // 消息列表
             Messages(
                 messages = uiState.messages,
                 navigateToProfile = navigateToProfile,
                 modifier = Modifier.weight(1f),
                 scrollState = scrollState,
             )
+            
+            // 用户输入区域
             UserInput(
                 onMessageSent = { content ->
-                    // 1. Add User Message to UI
+                    // 1. 立即将用户消息添加到 UI
                     uiState.addMessage(
                         Message(authorMe, content, timeNow),
                     )
                     
-                    // 2. Call LLM
+                    // 2. 调用 LLM 获取响应
                     if (providerSetting != null && model != null) {
+                        // 检查提供商是否兼容
+                        if (providerSetting !is ProviderSetting.OpenAI) {
+                             uiState.addMessage(
+                                Message("System", "Currently only OpenAI compatible providers are supported.", timeNow)
+                            )
+                            return@UserInput
+                        }
+                        
                         scope.launch {
                             try {
-                                // Prepare context
+                                // 为 AI 准备对话上下文
                                 val history = uiState.messages.asReversed().map { msg ->
                                     UIMessage(
                                         role = if (msg.author == authorMe) MessageRole.USER else MessageRole.ASSISTANT,
                                         parts = listOf(UIMessagePart.Text(msg.content))
                                     )
-                                }.takeLast(10) // Simple context window
+                                }.takeLast(10) // 保持最近 10 条消息的简单上下文窗口
 
-                                // Add initial empty AI message
+                                // 添加初始空 AI 消息占位符
                                 uiState.addMessage(
                                     Message("AI", "", timeNow)
                                 )
 
                                 if (uiState.streamResponse) {
-                                    // Call streamText
+                                    // 调用 streamText 进行流式响应
                                     provider.streamText(
                                         providerSetting = providerSetting,
                                         messages = history,
@@ -326,7 +393,7 @@ fun ConversationContent(
                                         )
                                     ).collect { chunk ->
                                         withContext(Dispatchers.Main) {
-                                            // Update UI with chunk
+                                            // 使用每个块更新 UI
                                             val deltaContent = chunk.choices.firstOrNull()?.delta?.toText() ?: ""
                                             if (deltaContent.isNotEmpty()) {
                                                 uiState.appendToLastMessage(deltaContent)
@@ -334,7 +401,7 @@ fun ConversationContent(
                                         }
                                     }
                                 } else {
-                                    // Call generateText
+                                    // 调用 generateText 进行非流式响应
                                     val response = provider.generateText(
                                         providerSetting = providerSetting,
                                         messages = history,
@@ -372,16 +439,17 @@ fun ConversationContent(
                         scrollState.scrollToItem(0)
                     }
                 },
-                // let this element handle the padding so that the elevation is shown behind the
-                // navigation bar
+                // 让此元素处理填充，以便将 elevation 显示在导航栏后面
                 modifier = Modifier.navigationBarsPadding().imePadding(),
                 onStartRecording = {
+                    // 检查权限并开始录音
                     if (ContextCompat.checkSelfPermission(
                             context,
                             Manifest.permission.RECORD_AUDIO
                         ) == PackageManager.PERMISSION_GRANTED
                     ) {
                         uiState.isRecording = true
+                        lastPartialLength = 0 // 重置部分长度跟踪器
                         scope.launch(Dispatchers.IO) {
                             youdaoWebSocket.connect()
                             audioRecorder.startRecording(
@@ -402,6 +470,7 @@ fun ConversationContent(
                     }
                 },
                 onStopRecording = {
+                    // 停止录音并关闭 socket
                     if (uiState.isRecording) {
                         uiState.isRecording = false
                         audioRecorder.stopRecording()
@@ -436,12 +505,12 @@ fun ChannelNameBar(
         onNavIconPressed = onNavIconPressed,
         title = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Channel name
+                // 频道名称
                 Text(
                     text = channelName,
                     style = MaterialTheme.typography.titleMedium,
                 )
-                // Number of members
+                // 成员数量
                 Text(
                     text = stringResource(R.string.members, channelMembers),
                     style = MaterialTheme.typography.bodySmall,
@@ -450,7 +519,7 @@ fun ChannelNameBar(
             }
         },
         actions = {
-            // Settings icon
+            // 设置图标
             IconButton(onClick = onSettingsClicked) {
                 Icon(
                     imageVector = Icons.Default.Settings,
@@ -458,7 +527,7 @@ fun ChannelNameBar(
                     contentDescription = "Settings"
                 )
             }
-            // Search icon
+            // 搜索图标
             Icon(
                 painterResource(id = R.drawable.ic_search),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -468,7 +537,7 @@ fun ChannelNameBar(
                     .height(24.dp),
                 contentDescription = stringResource(id = R.string.search),
             )
-            // Info icon
+            // 信息图标
             Icon(
                 painterResource(id = R.drawable.ic_info),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -482,6 +551,14 @@ fun ChannelNameBar(
     )
 }
 
+/**
+ * 配置 AI 模型设置的对话框。
+ *
+ * 允许用户调整：
+ * - Temperature (温度，创造性 vs 精确性)
+ * - Max Tokens (最大 Token 数，响应长度)
+ * - Stream Response (流式响应，启用/禁用流式传输)
+ */
 @Composable
 fun ModelSettingsDialog(
     uiState: ConversationUiState,
@@ -497,7 +574,7 @@ fun ModelSettingsDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Temperature Setting
+                // 温度设置滑块
                 Text(
                     text = "Temperature",
                     style = MaterialTheme.typography.titleMedium,
@@ -534,7 +611,7 @@ fun ModelSettingsDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Max Tokens Setting
+                // 最大 Token 数设置滑块
                 Text(
                     text = "Max Tokens",
                     style = MaterialTheme.typography.titleMedium,
@@ -565,13 +642,13 @@ fun ModelSettingsDialog(
                     value = uiState.maxTokens.toFloat(),
                     onValueChange = { uiState.maxTokens = it.roundToInt() },
                     valueRange = 100f..4096f,
-                    steps = 39, // (4096-100)/100 approx 40 steps
+                    steps = 39, // (4096-100)/100 约等于 40 步
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Stream Response Setting
+                // 流式响应开关
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -623,7 +700,7 @@ fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrol
                 val isFirstMessageByAuthor = prevAuthor != content.author
                 val isLastMessageByAuthor = nextAuthor != content.author
 
-                // Hardcode day dividers for simplicity
+                // 为了简单起见，硬编码日期分隔线
                 if (index == messages.size - 1) {
                     item {
                         DayHeader("20 Aug")
@@ -645,14 +722,13 @@ fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrol
                 }
             }
         }
-        // Jump to bottom button shows up when user scrolls past a threshold.
-        // Convert to pixels:
+        // 当用户滚动超过阈值时显示跳转到底部按钮。
+        // 转换为像素：
         val jumpThreshold = with(LocalDensity.current) {
             JumpToBottomThreshold.toPx()
         }
 
-        // Show the button if the first visible item is not the first one or if the offset is
-        // greater than the threshold.
+        // 如果第一个可见项不是第一个，或者偏移量大于阈值，则显示该按钮。
         val jumpToBottomButtonEnabled by remember {
             derivedStateOf {
                 scrollState.firstVisibleItemIndex != 0 ||
@@ -661,7 +737,7 @@ fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrol
         }
 
         JumpToBottom(
-            // Only show if the scroller is not at the bottom
+            // 仅当滚动条不在底部时显示
             enabled = jumpToBottomButtonEnabled,
             onClicked = {
                 scope.launch {
@@ -690,7 +766,7 @@ fun Message(
     val spaceBetweenAuthors = if (isLastMessageByAuthor) Modifier.padding(top = 8.dp) else Modifier
     Row(modifier = spaceBetweenAuthors) {
         if (isLastMessageByAuthor) {
-            // Avatar
+            // 头像
             Image(
                 modifier = Modifier
                     .clickable(onClick = { onAuthorClick(msg.author) })
@@ -705,7 +781,7 @@ fun Message(
                 contentDescription = null,
             )
         } else {
-            // Space under avatar
+            // 头像下方的空间
             Spacer(modifier = Modifier.width(74.dp))
         }
         AuthorAndTextMessage(
@@ -736,10 +812,10 @@ fun AuthorAndTextMessage(
         }
         ChatItemBubble(msg, isUserMe, authorClicked = authorClicked)
         if (isFirstMessageByAuthor) {
-            // Last bubble before next author
+            // 下一个作者之前的最后一个气泡
             Spacer(modifier = Modifier.height(8.dp))
         } else {
-            // Between bubbles
+            // 气泡之间
             Spacer(modifier = Modifier.height(4.dp))
         }
     }
@@ -747,14 +823,14 @@ fun AuthorAndTextMessage(
 
 @Composable
 private fun AuthorNameTimestamp(msg: Message) {
-    // Combine author and timestamp for a11y.
+    // 为辅助功能合并作者和时间戳。
     Row(modifier = Modifier.semantics(mergeDescendants = true) {}) {
         Text(
             text = msg.author,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier
                 .alignBy(LastBaseline)
-                .paddingFrom(LastBaseline, after = 8.dp), // Space to 1st bubble
+                .paddingFrom(LastBaseline, after = 8.dp), // 距离第一个气泡的空间
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(

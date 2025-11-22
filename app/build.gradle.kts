@@ -137,4 +137,7 @@ dependencies {
 
     // Kotlin DateTime
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+    
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
 }

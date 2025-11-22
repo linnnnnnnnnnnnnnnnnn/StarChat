@@ -69,6 +69,15 @@ import com.example.star.aiwork.data.colleagueProfile
 import com.example.star.aiwork.data.meProfile
 import com.example.star.aiwork.theme.JetchatTheme
 
+/**
+ * 个人资料屏幕。
+ *
+ * 显示用户的详细信息，如头像、姓名、职位、状态等。
+ * 支持滚动，并包含一个根据滚动状态收缩/展开的 FAB。
+ *
+ * @param userData 用户个人资料数据。
+ * @param nestedScrollInteropConnection 用于与 View 系统（如 CoordinatorLayout）进行嵌套滚动的连接器。
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun ProfileScreen(
@@ -103,19 +112,28 @@ fun ProfileScreen(
             }
         }
 
+        // 当滚动条位于顶部（scrollY == 0）时，展开 FAB
         val fabExtended by remember { derivedStateOf { scrollState.value == 0 } }
+        
         ProfileFab(
             extended = fabExtended,
             userIsMe = userData.isMe(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                // Offsets the FAB to compensate for CoordinatorLayout collapsing behaviour
+                // 偏移 FAB 以补偿 CoordinatorLayout 的折叠行为 (如果存在)
+                // 在纯 Compose 环境中可能不需要这个负偏移
                 .offset(y = ((-100).dp)),
             onFabClicked = { functionalityNotAvailablePopupShown = true },
         )
     }
 }
 
+/**
+ * 用户信息字段列表。
+ *
+ * @param userData 用户数据。
+ * @param containerHeight 容器总高度，用于计算底部留白。
+ */
 @Composable
 private fun UserInfoFields(userData: ProfileScreenState, containerHeight: Dp) {
     Column {
@@ -133,12 +151,16 @@ private fun UserInfoFields(userData: ProfileScreenState, containerHeight: Dp) {
             ProfileProperty(stringResource(R.string.timezone), userData.timeZone)
         }
 
-        // Add a spacer that always shows part (320.dp) of the fields list regardless of the device,
-        // in order to always leave some content at the top.
+        // 添加一个 Spacer，确保列表内容在不同设备上都能占据一定高度，
+        // 从而保证顶部内容（如头像）在滚动时有足够的空间被折叠。
+        // 这里硬编码保留 320dp 的内容区域。
         Spacer(Modifier.height((containerHeight - 320.dp).coerceAtLeast(0.dp)))
     }
 }
 
+/**
+ * 姓名和职位组合组件。
+ */
 @Composable
 private fun NameAndPosition(userData: ProfileScreenState) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -174,6 +196,11 @@ private fun Position(userData: ProfileScreenState, modifier: Modifier = Modifier
     )
 }
 
+/**
+ * 个人资料头部（头像）。
+ *
+ * 头像会随着滚动产生视差效果（虽然这里的实现比较简单，主要是计算 padding）。
+ */
 @Composable
 private fun ProfileHeader(scrollState: ScrollState, data: ProfileScreenState, containerHeight: Dp) {
     val offset = (scrollState.value / 2)
@@ -184,7 +211,7 @@ private fun ProfileHeader(scrollState: ScrollState, data: ProfileScreenState, co
             modifier = Modifier
                 .heightIn(max = containerHeight / 2)
                 .fillMaxWidth()
-                // TODO: Update to use offset to avoid recomposition
+                // TODO: 更新为使用 offset 修饰符以避免重组 (recomposition)
                 .padding(
                     start = 16.dp,
                     top = offsetDp,
@@ -198,6 +225,9 @@ private fun ProfileHeader(scrollState: ScrollState, data: ProfileScreenState, co
     }
 }
 
+/**
+ * 单个属性行组件（标签 + 值）。
+ */
 @Composable
 fun ProfileProperty(label: String, value: String, isLink: Boolean = false) {
     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -226,10 +256,15 @@ fun ProfileError() {
     Text(stringResource(R.string.profile_error))
 }
 
+/**
+ * 个人资料页面的浮动操作按钮 (FAB)。
+ *
+ * 根据用户身份显示不同图标（编辑或发消息），并支持扩展动画。
+ */
 @Composable
 fun ProfileFab(extended: Boolean, userIsMe: Boolean, modifier: Modifier = Modifier, onFabClicked: () -> Unit = { }) {
     key(userIsMe) {
-        // Prevent multiple invocations to execute during composition
+        // 使用 key 防止在组合期间多次执行
         FloatingActionButton(
             onClick = onFabClicked,
             modifier = modifier

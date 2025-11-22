@@ -2,6 +2,16 @@ package com.example.star.aiwork.ai
 
 import android.util.Log
 
+/**
+ * 本地 LLM（大型语言模型）会话的具体实现。
+ *
+ * 此类代表与特定本地模型（如 Transformer 模型）的活动会话。
+ *
+ * @property modelId 模型的唯一标识符。
+ * @property sessionId 会话的唯一标识符。
+ * @property modelDir 模型文件所在的目录路径。
+ * @property historyList 初始聊天历史记录。
+ */
 class LlmSession(
     override val modelId: String,
     override val sessionId: String,
@@ -9,12 +19,21 @@ class LlmSession(
     override val historyList: List<ChatDataItem>?
 ) : ChatSession {
 
+    /**
+     * 标志该会话是否支持 Omni 功能（多模态能力）。
+     */
     override var supportOmni: Boolean = false
 
+    /**
+     * 根据用户查询生成响应。
+     *
+     * @param query 用户的输入查询文本。
+     * @return 生成的响应文本。
+     */
     fun generate(query: String): String {
         Log.d("LlmSession", "Generating response for query: $query")
-        // Dummy implementation for simulation purposes.
-        // In a real app, this would call a local LLM or API.
+        // 模拟实现的虚拟实现。
+        // 在实际应用中，这里会调用本地 LLM 引擎或 API。
         return "This is a simulated LLM response for session $sessionId: I received '$query'"
     }
 }

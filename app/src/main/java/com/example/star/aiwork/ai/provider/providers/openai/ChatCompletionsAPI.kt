@@ -26,11 +26,30 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.BufferedReader
 import java.util.concurrent.TimeUnit
 
+/**
+ * OpenAI Chat Completions API 的具体实现。
+ *
+ * 负责处理与 OpenAI 风格的 /v1/chat/completions 接口的直接交互。
+ * 支持流式 (Stream) 和非流式 (Non-Stream) 的文本生成请求。
+ *
+ * @property client OkHttpClient 实例，用于发送网络请求。
+ * @property keyRoulette API Key 轮盘赌工具，用于密钥负载均衡。
+ */
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette
 ) {
 
+    /**
+     * 非流式生成文本。
+     *
+     * 发送 POST 请求并等待完整响应，然后解析为 MessageChunk。
+     *
+     * @param providerSetting OpenAI 提供商设置。
+     * @param messages 聊天历史消息列表。
+     * @param params 文本生成参数。
+     * @return 包含生成内容的 MessageChunk。
+     */
     suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -48,6 +67,16 @@ class ChatCompletionsAPI(
         return openAIChunk.toMessageChunk()
     }
 
+    /**
+     * 流式生成文本。
+     *
+     * 发送请求并建立 SSE (Server-Sent Events) 连接，逐行读取响应数据。
+     *
+     * @param providerSetting OpenAI 提供商设置。
+     * @param messages 聊天历史消息列表。
+     * @param params 文本生成参数。
+     * @return 发出 MessageChunk 的 Flow 数据流。
+     */
     suspend fun streamText(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
@@ -91,6 +120,13 @@ class ChatCompletionsAPI(
         }
     }
 
+    /**
+     * 构建 OkHttp 请求对象。
+     *
+     * 组装 URL、Header 和 JSON Body。
+     *
+     * @param stream 是否启用流式传输。
+     */
     private fun buildRequest(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,

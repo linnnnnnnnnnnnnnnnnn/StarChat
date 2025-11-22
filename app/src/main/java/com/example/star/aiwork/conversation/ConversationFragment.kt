@@ -22,18 +22,29 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.findNavController
 import com.example.star.aiwork.MainViewModel
 import com.example.star.aiwork.R
 import com.example.star.aiwork.data.exampleUiState
 import com.example.star.aiwork.theme.JetchatTheme
 
+/**
+ * 承载聊天界面的 Fragment。
+ *
+ * 它是应用主要导航图的一部分，负责：
+ * 1. 托管 Compose UI 内容。
+ * 2. 获取和订阅 ViewModel 数据（包括用户配置）。
+ * 3. 处理 Fragment 级别的导航事件。
+ */
 class ConversationFragment : Fragment() {
 
+    // 获取 Activity 范围的 MainViewModel 实例，以共享数据
     private val activityViewModel: MainViewModel by activityViewModels()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
@@ -41,11 +52,17 @@ class ConversationFragment : Fragment() {
             layoutParams = LayoutParams(MATCH_PARENT, MATCH_PARENT)
 
             setContent {
+                // 收集来自 ViewModel 的状态流，确保 UI 随数据更新而重组
+                val providerSettings by activityViewModel.providerSettings.collectAsStateWithLifecycle()
+                val temperature by activityViewModel.temperature.collectAsStateWithLifecycle()
+                val maxTokens by activityViewModel.maxTokens.collectAsStateWithLifecycle()
+                val streamResponse by activityViewModel.streamResponse.collectAsStateWithLifecycle()
+
                 JetchatTheme {
                     ConversationContent(
-                        uiState = exampleUiState,
+                        uiState = exampleUiState, // 示例 UI 状态
                         navigateToProfile = { user ->
-                            // Click callback
+                            // 导航到个人资料页面的回调
                             val bundle = bundleOf("userId" to user)
                             findNavController().navigate(
                                 R.id.nav_profile,
@@ -53,8 +70,20 @@ class ConversationFragment : Fragment() {
                             )
                         },
                         onNavIconPressed = {
+                            // 打开侧边栏
                             activityViewModel.openDrawer()
                         },
+                        // 传递从 ViewModel 获取的配置参数
+                        providerSettings = providerSettings,
+                        temperature = temperature,
+                        maxTokens = maxTokens,
+                        streamResponse = streamResponse,
+                        // 处理配置更新事件，回调 ViewModel 进行保存
+                        onUpdateSettings = { temp, tokens, stream ->
+                            activityViewModel.updateTemperature(temp)
+                            activityViewModel.updateMaxTokens(tokens)
+                            activityViewModel.updateStreamResponse(stream)
+                        }
                     )
                 }
             }

@@ -49,6 +49,16 @@ import com.example.star.aiwork.R
 import com.example.star.aiwork.components.JetchatAppBar
 import com.example.star.aiwork.theme.JetchatTheme
 
+/**
+ * 显示用户个人资料的 Fragment。
+ *
+ * 该 Fragment 将 Compose UI 嵌入到传统的 View 系统中。
+ * 它使用 ViewBinding (或 findViewById) 找到 ComposeView，并设置其内容。
+ *
+ * 主要包含两个 ComposeView:
+ * 1. Toolbar (顶部应用栏)
+ * 2. Profile Content (个人资料详情)
+ */
 class ProfileFragment : Fragment() {
 
     private val viewModel: ProfileViewModel by viewModels()
@@ -56,7 +66,8 @@ class ProfileFragment : Fragment() {
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
-        // Consider using safe args plugin
+        // 获取传递给 Fragment 的参数 (userId)
+        // 建议在实际项目中使用 Safe Args 插件
         val userId = arguments?.getString("userId")
         viewModel.setUserId(userId)
     }
@@ -65,6 +76,7 @@ class ProfileFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val rootView: View = inflater.inflate(R.layout.fragment_profile, container, false)
 
+        // 设置顶部工具栏的 Compose 内容
         rootView.findViewById<ComposeView>(R.id.toolbar_compose_view).apply {
             setContent {
                 var functionalityNotAvailablePopupShown by remember { mutableStateOf(false) }
@@ -74,12 +86,12 @@ class ProfileFragment : Fragment() {
 
                 JetchatTheme {
                     JetchatAppBar(
-                        // Reset the minimum bounds that are passed to the root of a compose tree
+                        // 重置传递给 Compose 树根的最小边界，以适应 WrapContent
                         modifier = Modifier.wrapContentSize(),
                         onNavIconPressed = { activityViewModel.openDrawer() },
                         title = { },
                         actions = {
-                            // More icon
+                            // "更多" 选项图标
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_more_vert),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -97,9 +109,12 @@ class ProfileFragment : Fragment() {
             }
         }
 
+        // 设置个人资料主要内容的 Compose 内容
         rootView.findViewById<ComposeView>(R.id.profile_compose_view).apply {
             setContent {
+                // 观察 ViewModel 中的用户数据
                 val userData by viewModel.userData.observeAsState()
+                // 记住嵌套滚动互操作连接，以便与 CoordinatorLayout 等 View 组件协同工作
                 val nestedScrollInteropConnection = rememberNestedScrollInteropConnection()
 
                 JetchatTheme {

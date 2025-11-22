@@ -38,15 +38,25 @@ import com.example.star.aiwork.conversation.Message
 import com.example.star.aiwork.widget.theme.JetChatGlanceTextStyles
 import com.example.star.aiwork.widget.theme.JetchatGlanceColorScheme
 
+/**
+ * 显示消息列表的 Glance 小部件 Composable。
+ *
+ * 使用 [Scaffold] 提供标准的小部件布局结构，包含标题栏和内容区域。
+ * 内容区域使用 [LazyColumn] 来高效显示消息列表。
+ *
+ * @param messages 要显示的消息列表。
+ */
 @Composable
 fun MessagesWidget(messages: List<Message>) {
     Scaffold(titleBar = {
+        // 小部件标题栏
         TitleBar(
             startIcon = ImageProvider(R.drawable.ic_jetchat),
-            iconColor = null,
+            iconColor = null, // null 表示使用图标的原始颜色
             title = LocalContext.current.getString(R.string.messages_widget_title),
         )
     }, backgroundColor = JetchatGlanceColorScheme.colors.background) {
+        // 可滚动的消息列表
         LazyColumn(modifier = GlanceModifier.fillMaxWidth()) {
             messages.forEach {
                 item {
@@ -60,8 +70,16 @@ fun MessagesWidget(messages: List<Message>) {
     }
 }
 
+/**
+ * 单条消息的显示项。
+ *
+ * 显示消息作者和内容。点击该项会启动应用的主 Activity [NavActivity]。
+ *
+ * @param message 要显示的消息对象。
+ */
 @Composable
 fun MessageItem(message: Message) {
+    // 设置点击事件：点击启动 NavActivity
     Column(modifier = GlanceModifier.clickable(actionStartActivity<NavActivity>()).fillMaxWidth()) {
         Text(
             text = message.author,

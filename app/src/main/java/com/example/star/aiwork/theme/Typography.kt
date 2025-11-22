@@ -26,16 +26,33 @@ import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
 import com.example.star.aiwork.R
 
+/**
+ * Google Fonts 字体提供商配置。
+ *
+ * 指向 Google Play 服务中的字体提供程序。
+ */
 val provider = GoogleFont.Provider(
     providerAuthority = "com.google.android.gms.fonts",
     providerPackage = "com.google.android.gms",
     certificates = R.array.com_google_android_gms_fonts_certs,
 )
 
+/**
+ * 定义 Montserrat 字体。
+ */
 val MontserratFont = GoogleFont(name = "Montserrat")
 
+/**
+ * 定义 Karla 字体。
+ */
 val KarlaFont = GoogleFont(name = "Karla")
 
+/**
+ * Montserrat 字体家族。
+ *
+ * 包含多种字重 (Light, Regular, Medium, SemiBold) 以及对应的备用字体资源。
+ * 如果 Google Fonts 加载失败，将回退到本地 XML 字体资源 (R.font.montserrat_*)。
+ */
 val MontserratFontFamily = FontFamily(
     Font(googleFont = MontserratFont, fontProvider = provider),
     Font(resId = R.font.montserrat_regular),
@@ -47,6 +64,11 @@ val MontserratFontFamily = FontFamily(
     Font(resId = R.font.montserrat_semibold, weight = FontWeight.SemiBold),
 )
 
+/**
+ * Karla 字体家族。
+ *
+ * 包含 Regular 和 Bold 字重。
+ */
 val KarlaFontFamily = FontFamily(
     Font(googleFont = KarlaFont, fontProvider = provider),
     Font(resId = R.font.karla_regular),
@@ -54,6 +76,11 @@ val KarlaFontFamily = FontFamily(
     Font(resId = R.font.karla_bold, weight = FontWeight.Bold),
 )
 
+/**
+ * Jetchat 的排版系统。
+ *
+ * 遵循 Material 3 的 Type Scale 规范，使用自定义的 Montserrat 和 Karla 字体。
+ */
 val JetchatTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = MontserratFontFamily,

@@ -28,6 +28,10 @@ import com.example.star.aiwork.data.EMOJIS.EMOJI_PINK_HEART
 import com.example.star.aiwork.data.EMOJIS.EMOJI_POINTS
 import com.example.star.aiwork.profile.ProfileScreenState
 
+/**
+ * 初始消息列表。
+ * 包含用于演示的假对话数据。
+ */
 val initialMessages = listOf(
     Message(
         "me",
@@ -82,8 +86,14 @@ val initialMessages = listOf(
     ),
 )
 
+/**
+ * 未读消息列表（用于演示）。
+ */
 val unreadMessages = initialMessages.filter { it.author != "me" }
 
+/**
+ * 示例 UI 状态。
+ */
 val exampleUiState = ConversationUiState(
     initialMessages = initialMessages,
     channelName = "#composers",
@@ -91,7 +101,7 @@ val exampleUiState = ConversationUiState(
 )
 
 /**
- * Example colleague profile
+ * 同事个人资料示例。
  */
 val colleagueProfile = ProfileScreenState(
     userId = "12345",
@@ -106,7 +116,7 @@ val colleagueProfile = ProfileScreenState(
 )
 
 /**
- * Example "me" profile.
+ * "我" 的个人资料示例。
  */
 val meProfile = ProfileScreenState(
     userId = "me",
@@ -120,6 +130,10 @@ val meProfile = ProfileScreenState(
     commonChannels = null,
 )
 
+/**
+ * 表情符号常量对象。
+ * 包含各种 Android 版本和 Emoji 版本中引入的特殊字符。
+ */
 object EMOJIS {
     // EMOJI 15
     const val EMOJI_PINK_HEART = "\uD83E\uDE77"
@@ -137,6 +151,12 @@ object EMOJIS {
     const val EMOJI_POINTS = " \uD83D\uDC49"
 }
 
+/**
+ * 免费提供商配置列表。
+ *
+ * 包含默认配置的 AI 服务提供商，如 SiliconFlow 和 DeepSeek。
+ * 这些配置用于演示目的，并在用户首次启动应用时作为默认设置加载。
+ */
 val freeProviders = listOf(
     ProviderSetting.OpenAI(
         id = "silicon_cloud",

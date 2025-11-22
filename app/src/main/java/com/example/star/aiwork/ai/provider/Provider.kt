@@ -20,11 +20,17 @@ import java.math.BigDecimal
 interface Provider<T : ProviderSetting> {
     /**
      * 获取该提供商支持的模型列表。
+     *
+     * @param providerSetting 提供商配置。
+     * @return 模型列表。
      */
     suspend fun listModels(providerSetting: T): List<Model>
 
     /**
      * 获取账户余额（可选实现）。
+     *
+     * @param providerSetting 提供商配置。
+     * @return 余额字符串。
      */
     suspend fun getBalance(providerSetting: T): String {
         return "TODO"
@@ -33,6 +39,11 @@ interface Provider<T : ProviderSetting> {
     /**
      * 非流式生成文本。
      * 发送消息列表并等待完整响应。
+     *
+     * @param providerSetting 提供商配置。
+     * @param messages 历史消息列表。
+     * @param params 生成参数 (Temperature, Max Tokens 等)。
+     * @return 包含生成内容的消息块。
      */
     suspend fun generateText(
         providerSetting: T,
@@ -43,6 +54,11 @@ interface Provider<T : ProviderSetting> {
     /**
      * 流式生成文本。
      * 发送消息列表并返回一个 [Flow]，逐步产生文本块。
+     *
+     * @param providerSetting 提供商配置。
+     * @param messages 历史消息列表。
+     * @param params 生成参数。
+     * @return 消息块的数据流 (Flow)。
      */
     suspend fun streamText(
         providerSetting: T,
@@ -52,6 +68,10 @@ interface Provider<T : ProviderSetting> {
 
     /**
      * 生成图像。
+     *
+     * @param providerSetting 提供商配置。
+     * @param params 图像生成参数 (Prompt, 宽高比等)。
+     * @return 图像生成结果。
      */
     suspend fun generateImage(
         providerSetting: ProviderSetting,
@@ -64,11 +84,11 @@ interface Provider<T : ProviderSetting> {
  * 封装了调用 LLM API 时所需的各种超参数和工具配置。
  *
  * @property model 目标模型。
- * @property temperature 随机性 (Temperature)。
- * @property topP 核采样 (Top-P)。
+ * @property temperature 随机性 (Temperature)，控制生成的创造性。
+ * @property topP 核采样 (Top-P)，控制生成的多样性。
  * @property maxTokens 最大生成 Token 数。
- * @property tools 可用的工具列表。
- * @property thinkingBudget 思考/推理预算。
+ * @property tools 可用的工具列表 (用于 Function Calling)。
+ * @property thinkingBudget 思考/推理预算 (针对某些支持 Chain of Thought 的模型)。
  * @property customHeaders 自定义 HTTP 头部。
  * @property customBody 自定义 HTTP Body 参数。
  */
@@ -107,6 +127,9 @@ data class ImageGenerationParams(
 /**
  * 自定义 HTTP 头部。
  * 用于向 API 请求中添加额外的 Header。
+ *
+ * @property name Header 名称。
+ * @property value Header 值。
  */
 @Serializable
 data class CustomHeader(
@@ -117,6 +140,9 @@ data class CustomHeader(
 /**
  * 自定义 HTTP Body 参数。
  * 用于向 API 请求体中注入额外的 JSON 字段。
+ *
+ * @property key JSON 键。
+ * @property value JSON 值 (支持复杂对象)。
  */
 @Serializable
 data class CustomBody(

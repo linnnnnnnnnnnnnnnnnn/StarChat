@@ -55,6 +55,19 @@ import com.example.star.aiwork.R
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
+/**
+ * 录音按钮组件。
+ *
+ * 该组件处理录音的交互逻辑，包括长按录音、滑动取消等手势，并提供录音状态的视觉反馈动画。
+ *
+ * @param recording 当前是否正在录音。
+ * @param swipeOffset 当前滑动的偏移量（用于检测滑动取消）。
+ * @param onSwipeOffsetChange 当滑动偏移量改变时的回调。
+ * @param onStartRecording 开始录音的回调。返回 true 表示成功开始。
+ * @param onFinishRecording 完成录音的回调（正常松手）。
+ * @param onCancelRecording 取消录音的回调（滑动取消或异常中断）。
+ * @param modifier 修饰符。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordButton(
@@ -66,17 +79,24 @@ fun RecordButton(
     onCancelRecording: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 动画转换状态，根据 recording 状态变化触发动画
     val transition = updateTransition(targetState = recording, label = "record")
+    
+    // 缩放动画：录音时按钮背景放大
     val scale = transition.animateFloat(
         transitionSpec = { spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessLow) },
         label = "record-scale",
         targetValueByState = { rec -> if (rec) 2f else 1f },
     )
+    
+    // 透明度动画：录音时显示背景
     val containerAlpha = transition.animateFloat(
         transitionSpec = { tween(2000) },
         label = "record-scale",
         targetValueByState = { rec -> if (rec) 1f else 0f },
     )
+    
+    // 图标颜色动画：录音时改变图标颜色以适配背景
     val iconColor = transition.animateColor(
         transitionSpec = { tween(200) },
         label = "record-scale",
@@ -87,7 +107,7 @@ fun RecordButton(
     )
 
     Box {
-        // Background during recording
+        // 录音时的背景效果层
         Box(
             Modifier
                 .matchParentSize()
@@ -100,8 +120,11 @@ fun RecordButton(
                 .clip(CircleShape)
                 .background(LocalContentColor.current),
         )
+        
         val scope = rememberCoroutineScope()
         val tooltipState = remember { TooltipState() }
+        
+        // 工具提示：显示“长按录音”提示
         TooltipBox(
             positionProvider = TooltipDefaults.rememberRichTooltipPositionProvider(),
             tooltip = {
@@ -119,11 +142,11 @@ fun RecordButton(
                 modifier = modifier
                     .sizeIn(minWidth = 56.dp, minHeight = 6.dp)
                     .padding(18.dp)
-                    .clickable { }
+                    .clickable { } // 这里的点击事件为空，因为主要交互由 voiceRecordingGesture 处理
                     .voiceRecordingGesture(
                         horizontalSwipeProgress = swipeOffset,
                         onSwipeProgressChanged = onSwipeOffsetChange,
-                        onClick = { scope.launch { tooltipState.show() } },
+                        onClick = { scope.launch { tooltipState.show() } }, // 点击时显示提示
                         onStartRecording = onStartRecording,
                         onFinishRecording = onFinishRecording,
                         onCancelRecording = onCancelRecording,
@@ -133,6 +156,20 @@ fun RecordButton(
     }
 }
 
+/**
+ * 自定义 Modifier，用于处理语音录制的手势逻辑。
+ *
+ * 处理长按开始、拖拽、松手结束以及左滑取消等逻辑。
+ *
+ * @param horizontalSwipeProgress 获取当前水平滑动进度的 lambda。
+ * @param onSwipeProgressChanged 水平滑动进度改变时的回调。
+ * @param onClick 点击时的回调（非长按）。
+ * @param onStartRecording 开始录音的回调。
+ * @param onFinishRecording 完成录音的回调。
+ * @param onCancelRecording 取消录音的回调。
+ * @param swipeToCancelThreshold 滑动取消的水平距离阈值。
+ * @param verticalThreshold 滑动取消的垂直容差阈值。
+ */
 private fun Modifier.voiceRecordingGesture(
     horizontalSwipeProgress: () -> Float,
     onSwipeProgressChanged: (Float) -> Unit,
@@ -143,7 +180,9 @@ private fun Modifier.voiceRecordingGesture(
     swipeToCancelThreshold: Dp = 200.dp,
     verticalThreshold: Dp = 80.dp,
 ): Modifier = this
+    // 处理点击手势
     .pointerInput(Unit) { detectTapGestures { onClick() } }
+    // 处理长按和拖拽手势
     .pointerInput(Unit) {
         var offsetY = 0f
         var dragging = false
@@ -152,16 +191,19 @@ private fun Modifier.voiceRecordingGesture(
 
         detectDragGesturesAfterLongPress(
             onDragStart = {
+                // 长按开始，初始化状态并触发开始录音
                 onSwipeProgressChanged(0f)
                 offsetY = 0f
                 dragging = true
                 onStartRecording()
             },
             onDragCancel = {
+                // 手势被系统取消（如来电等），触发取消录音
                 onCancelRecording()
                 dragging = false
             },
             onDragEnd = {
+                // 用户松手，如果正在拖拽（录音中），则触发完成录音
                 if (dragging) {
                     onFinishRecording()
                 }
@@ -169,9 +211,16 @@ private fun Modifier.voiceRecordingGesture(
             },
             onDrag = { change, dragAmount ->
                 if (dragging) {
+                    // 更新滑动进度
                     onSwipeProgressChanged(horizontalSwipeProgress() + dragAmount.x)
                     offsetY += dragAmount.y
+                    
                     val offsetX = horizontalSwipeProgress()
+                    
+                    // 检测是否达到“滑动取消”的条件：
+                    // 1. 向左滑动 (offsetX < 0)
+                    // 2. 水平距离超过阈值 (abs(offsetX) >= swipeToCancelThresholdPx)
+                    // 3. 垂直偏移在容差范围内 (abs(offsetY) <= verticalThresholdPx)
                     if (
                         offsetX < 0 &&
                         abs(offsetX) >= swipeToCancelThresholdPx &&

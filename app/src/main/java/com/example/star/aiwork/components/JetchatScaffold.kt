@@ -25,6 +25,18 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import com.example.star.aiwork.theme.JetchatTheme
 
+/**
+ * 封装了 ModalNavigationDrawer 的 Jetchat 脚手架。
+ *
+ * 该组件为应用提供了一个侧边导航抽屉结构。它将具体的抽屉内容 (JetchatDrawerContent)
+ * 和主屏幕内容组合在一起。
+ *
+ * @param drawerState 抽屉的状态 (打开或关闭)。
+ * @param selectedMenu 当前选中的菜单项，用于高亮显示。
+ * @param onProfileClicked 当用户在抽屉中点击个人资料时触发的回调。
+ * @param onChatClicked 当用户在抽屉中点击聊天会话时触发的回调。
+ * @param content 抽屉关闭时显示的主屏幕内容。
+ */
 @Composable
 fun JetchatDrawer(
     drawerState: DrawerState = rememberDrawerState(initialValue = Closed),

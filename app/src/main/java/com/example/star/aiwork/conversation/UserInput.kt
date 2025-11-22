@@ -17,15 +17,9 @@
 package com.example.star.aiwork.conversation
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -43,7 +37,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -52,7 +45,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -70,7 +62,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,18 +70,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -107,23 +94,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.star.aiwork.FunctionalityNotAvailablePopup
 import com.example.star.aiwork.R
-import kotlin.math.absoluteValue
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
 
+/**
+ * 输入选择器枚举，定义当前激活的输入面板类型。
+ */
 enum class InputSelector {
-    NONE,
-    MAP,
-    DM,
-    EMOJI,
-    PHONE,
-    PICTURE,
+    NONE, // 无选中，显示标准键盘
+    MAP, // 地图选择器（未实现）
+    DM, // 私信（未实现）
+    EMOJI, // 表情符号选择器
+    PHONE, // 电话（未实现）
+    PICTURE, // 图片选择器（未实现）
 }
 
+/**
+ * 表情/贴纸选择器枚举。
+ */
 enum class EmojiStickerSelector {
-    EMOJI,
-    STICKER,
+    EMOJI, // 绘文字
+    STICKER, // 贴纸
 }
 
 @Preview
@@ -132,6 +121,23 @@ fun UserInputPreview() {
     UserInput(onMessageSent = {})
 }
 
+/**
+ * 用户输入区域组件。
+ *
+ * 包含：
+ * 1. 文本输入框 [UserInputText]
+ * 2. 功能选择栏 [UserInputSelector] (包含表情、图片、语音录制、发送按钮)
+ * 3. 扩展选择面板 [SelectorExpanded] (如表情键盘)
+ *
+ * @param onMessageSent 发送消息的回调。
+ * @param modifier 修饰符。
+ * @param resetScroll 重置消息列表滚动的回调。
+ * @param onStartRecording 开始录音的回调。
+ * @param onStopRecording 停止录音的回调。
+ * @param isRecording 当前是否正在录音。
+ * @param textFieldValue 当前输入框的文本内容。
+ * @param onTextChanged 文本内容变化时的回调。
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun UserInput(
@@ -144,25 +150,27 @@ fun UserInput(
     textFieldValue: TextFieldValue = TextFieldValue(),
     onTextChanged: (TextFieldValue) -> Unit = {}
 ) {
+    // 当前选中的输入面板 (表情、图片等)
     var currentInputSelector by rememberSaveable { mutableStateOf(InputSelector.NONE) }
     val dismissKeyboard = { currentInputSelector = InputSelector.NONE }
 
-    // Intercept back navigation if there's a InputSelector visible
+    // 如果有扩展面板打开，拦截返回键以关闭面板而不是退出 Activity
     if (currentInputSelector != InputSelector.NONE) {
         BackHandler(onBack = dismissKeyboard)
     }
 
-    // Used to decide if the keyboard should be shown
+    // 记录文本框的焦点状态，用于决定是否显示键盘
     var textFieldFocusState by remember { mutableStateOf(false) }
 
     Surface(tonalElevation = 2.dp, contentColor = MaterialTheme.colorScheme.secondary) {
         Column(modifier = modifier) {
+            // 1. 文本输入框区域
             UserInputText(
                 textFieldValue = textFieldValue,
                 onTextChanged = onTextChanged,
-                // Only show the keyboard if there's no input selector and text field has focus
+                // 仅当没有选中特殊输入面板且文本框有焦点时，才显示软键盘
                 keyboardShown = currentInputSelector == InputSelector.NONE && textFieldFocusState,
-                // Close extended selector if text field receives focus
+                // 当文本框获得焦点时，关闭扩展选择面板
                 onTextFieldFocused = { focused ->
                     if (focused) {
                         currentInputSelector = InputSelector.NONE
@@ -172,22 +180,21 @@ fun UserInput(
                 },
                 onMessageSent = {
                     onMessageSent(textFieldValue.text)
-                    // Reset text field and close keyboard
+                    // 发送后清空文本框
                     onTextChanged(TextFieldValue())
-                    // Move scroll to bottom
+                    // 滚动到底部
                     resetScroll()
                 },
-                focusState = textFieldFocusState,
-                isRecording = isRecording
+                focusState = textFieldFocusState
             )
+            
+            // 2. 功能按钮行 (表情、图片、录音、发送)
             UserInputSelector(
                 onSelectorChange = { currentInputSelector = it },
                 sendMessageEnabled = textFieldValue.text.isNotBlank(),
                 onMessageSent = {
                     onMessageSent(textFieldValue.text)
-                    // Reset text field and close keyboard
                     onTextChanged(TextFieldValue())
-                    // Move scroll to bottom
                     resetScroll()
                     dismissKeyboard()
                 },
@@ -196,6 +203,8 @@ fun UserInput(
                 onStopRecording = onStopRecording,
                 isRecording = isRecording
             )
+            
+            // 3. 扩展选择面板区域 (例如点击表情按钮后弹出的区域)
             SelectorExpanded(
                 onCloseRequested = dismissKeyboard,
                 onTextAdded = { onTextChanged(textFieldValue.addText(it)) },
@@ -205,6 +214,9 @@ fun UserInput(
     }
 }
 
+/**
+ * 辅助扩展函数：在当前光标位置插入文本。
+ */
 private fun TextFieldValue.addText(newString: String): TextFieldValue {
     val newText = this.text.replaceRange(
         this.selection.start,
@@ -219,13 +231,16 @@ private fun TextFieldValue.addText(newString: String): TextFieldValue {
     return this.copy(text = newText, selection = newSelection)
 }
 
+/**
+ * 显示扩展的输入面板内容。
+ * 根据 [currentSelector] 显示表情选择器或其他提示。
+ */
 @Composable
 private fun SelectorExpanded(currentSelector: InputSelector, onCloseRequested: () -> Unit, onTextAdded: (String) -> Unit) {
     if (currentSelector == InputSelector.NONE) return
 
-    // Request focus to force the TextField to lose it
+    // 请求焦点以强制 TextField 失去焦点，从而隐藏软键盘
     val focusRequester = remember { FocusRequester() }
-    // If the selector is shown, always request focus to trigger a TextField.onFocusChange.
     SideEffect {
         if (currentSelector == InputSelector.EMOJI) {
             focusRequester.requestFocus()
@@ -246,6 +261,9 @@ private fun SelectorExpanded(currentSelector: InputSelector, onCloseRequested: (
     }
 }
 
+/**
+ * 功能不可用提示面板。
+ */
 @Composable
 fun FunctionalityNotAvailablePanel() {
     AnimatedVisibility(
@@ -274,6 +292,10 @@ fun FunctionalityNotAvailablePanel() {
     }
 }
 
+/**
+ * 输入选择器栏。
+ * 包含表情按钮、图片按钮、录音按钮和发送按钮。
+ */
 @Composable
 private fun UserInputSelector(
     onSelectorChange: (InputSelector) -> Unit,
@@ -292,6 +314,7 @@ private fun UserInputSelector(
             .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // 表情选择按钮
         InputSelectorButton(
             onClick = { onSelectorChange(InputSelector.EMOJI) },
             icon = painterResource(id = R.drawable.ic_mood),
@@ -299,7 +322,7 @@ private fun UserInputSelector(
             description = stringResource(id = R.string.emoji_selector_bt_desc),
         )
         
-        // Only keep Emoji and Picture selectors
+        // 图片选择按钮
         InputSelectorButton(
             onClick = { onSelectorChange(InputSelector.PICTURE) },
             icon = painterResource(id = R.drawable.ic_insert_photo),
@@ -307,10 +330,10 @@ private fun UserInputSelector(
             description = stringResource(id = R.string.attach_photo_desc),
         )
         
-        // Recording Button
+        // 录音按钮
         val recordingColor = if (isRecording) MaterialTheme.colorScheme.error else LocalContentColor.current
         
-        // 使用 Box 自定义按钮，去除 IconButton 的默认点击干扰
+        // 使用 Box 自定义按钮，去除 IconButton 的默认点击干扰，并支持按下/抬起手势
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
@@ -339,6 +362,7 @@ private fun UserInputSelector(
             )
         }
         
+        // 录音状态提示
         if (isRecording) {
             Text(
                 text = "Recording...",
@@ -348,6 +372,7 @@ private fun UserInputSelector(
             )
         }
 
+        // 如果没有文本内容，显示边框
         val border = if (!sendMessageEnabled) {
             BorderStroke(
                 width = 1.dp,
@@ -365,7 +390,7 @@ private fun UserInputSelector(
             disabledContentColor = disabledContentColor,
         )
 
-        // Send button
+        // 发送按钮
         Button(
             modifier = Modifier.height(36.dp),
             enabled = sendMessageEnabled,
@@ -382,6 +407,9 @@ private fun UserInputSelector(
     }
 }
 
+/**
+ * 输入选择器栏上的单个图标按钮。
+ */
 @Composable
 private fun InputSelectorButton(
     onClick: () -> Unit,
@@ -426,6 +454,10 @@ private fun NotAvailablePopup(onDismissed: () -> Unit) {
 val KeyboardShownKey = SemanticsPropertyKey<Boolean>("KeyboardShownKey")
 var SemanticsPropertyReceiver.keyboardShownProperty by KeyboardShownKey
 
+/**
+ * 文本输入框组件。
+ * 包装了 BasicTextField 并处理了布局和动画。
+ */
 @OptIn(ExperimentalAnimationApi::class)
 @ExperimentalFoundationApi
 @Composable
@@ -436,10 +468,8 @@ private fun UserInputText(
     keyboardShown: Boolean,
     onTextFieldFocused: (Boolean) -> Unit,
     onMessageSent: (String) -> Unit,
-    focusState: Boolean,
-    isRecording: Boolean
+    focusState: Boolean
 ) {
-    val swipeOffset = remember { mutableStateOf(0f) }
     val a11ylabel = stringResource(id = R.string.textfield_desc)
     Row(
         modifier = Modifier
@@ -447,35 +477,32 @@ private fun UserInputText(
             .height(64.dp),
         horizontalArrangement = Arrangement.End,
     ) {
-        AnimatedContent(
-            targetState = isRecording,
-            label = "text-field",
-            modifier = Modifier
+        Box(
+            Modifier
                 .weight(1f)
-                .fillMaxHeight(),
-        ) { recording ->
-            Box(Modifier.fillMaxSize()) {
-                if (recording) {
-                    RecordingIndicator { swipeOffset.value }
-                } else {
-                    UserInputTextField(
-                        textFieldValue,
-                        onTextChanged,
-                        onTextFieldFocused,
-                        keyboardType,
-                        focusState,
-                        onMessageSent,
-                        Modifier.fillMaxWidth().semantics {
-                            contentDescription = a11ylabel
-                            keyboardShownProperty = keyboardShown
-                        },
-                    )
-                }
-            }
+                .fillMaxHeight()
+        ) {
+            UserInputTextField(
+                textFieldValue,
+                onTextChanged,
+                onTextFieldFocused,
+                keyboardType,
+                focusState,
+                onMessageSent,
+                Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = a11ylabel
+                        keyboardShownProperty = keyboardShown
+                    },
+            )
         }
     }
 }
 
+/**
+ * 实际的文本输入框实现。
+ */
 @Composable
 private fun BoxScope.UserInputTextField(
     textFieldValue: TextFieldValue,
@@ -513,6 +540,7 @@ private fun BoxScope.UserInputTextField(
 
     val disableContentColor =
         MaterialTheme.colorScheme.onSurfaceVariant
+    // 如果文本为空且未获得焦点，显示提示文字
     if (textFieldValue.text.isEmpty() && !focusState) {
         Text(
             modifier = Modifier
@@ -524,71 +552,9 @@ private fun BoxScope.UserInputTextField(
     }
 }
 
-@Composable
-private fun RecordingIndicator(swipeOffset: () -> Float) {
-    var duration by remember { mutableStateOf(Duration.ZERO) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1000)
-            duration += 1.seconds
-        }
-    }
-    Row(
-        Modifier.fillMaxSize(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-
-        val animatedPulse = infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 0.2f,
-            animationSpec = infiniteRepeatable(
-                tween(2000),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "pulse",
-        )
-        Box(
-            Modifier
-                .size(56.dp)
-                .padding(24.dp)
-                .graphicsLayer {
-                    scaleX = animatedPulse.value
-                    scaleY = animatedPulse.value
-                }
-                .clip(CircleShape)
-                .background(Color.Red),
-        )
-        Text(
-            duration.toComponents { minutes, seconds, _ ->
-                val min = minutes.toString().padStart(2, '0')
-                val sec = seconds.toString().padStart(2, '0')
-                "$min:$sec"
-            },
-            Modifier.alignByBaseline(),
-        )
-        Box(
-            Modifier
-                .fillMaxSize()
-                .alignByBaseline()
-                .clipToBounds(),
-        ) {
-            val swipeThreshold = with(LocalDensity.current) { 200.dp.toPx() }
-            Text(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .graphicsLayer {
-                        translationX = swipeOffset() / 2
-                        alpha = 1 - (swipeOffset().absoluteValue / swipeThreshold)
-                    },
-                textAlign = TextAlign.Center,
-                text = stringResource(R.string.swipe_to_cancel_recording),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-    }
-}
-
+/**
+ * 表情选择器面板。
+ */
 @Composable
 fun EmojiSelector(onTextAdded: (String) -> Unit, focusRequester: FocusRequester) {
     var selected by remember { mutableStateOf(EmojiStickerSelector.EMOJI) }
@@ -596,8 +562,7 @@ fun EmojiSelector(onTextAdded: (String) -> Unit, focusRequester: FocusRequester)
     val a11yLabel = stringResource(id = R.string.emoji_selector_desc)
     Column(
         modifier = Modifier
-            .focusRequester(focusRequester) // Requests focus when the Emoji selector is displayed
-            // Make the emoji selector focusable so it can steal focus from TextField
+            .focusRequester(focusRequester) // 显示时请求焦点
             .focusTarget()
             .semantics { contentDescription = a11yLabel },
     ) {
@@ -652,6 +617,9 @@ fun ExtendedSelectorInnerButton(text: String, onClick: () -> Unit, selected: Boo
     }
 }
 
+/**
+ * 表情符号网格。
+ */
 @Composable
 fun EmojiTable(onTextAdded: (String) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {

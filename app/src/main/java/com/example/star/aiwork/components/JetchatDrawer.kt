@@ -61,10 +61,23 @@ import com.example.star.aiwork.data.meProfile
 import com.example.star.aiwork.theme.JetchatTheme
 import com.example.star.aiwork.widget.WidgetReceiver
 
+/**
+ * Jetchat 导航抽屉的具体内容。
+ *
+ * 包含：
+ * - 头部 Logo
+ * - 聊天列表 (Chats)
+ * - 最近联系人 (Recent Profiles)
+ * - 设置选项 (如添加 Widget)
+ *
+ * @param onProfileClicked 当点击个人资料项时的回调。
+ * @param onChatClicked 当点击聊天项时的回调。
+ * @param selectedMenu 当前选中的菜单项 ID。
+ */
 @Composable
 fun JetchatDrawerContent(onProfileClicked: (String) -> Unit, onChatClicked: (String) -> Unit, selectedMenu: String = "composers") {
-    // Use windowInsetsTopHeight() to add a spacer which pushes the drawer content
-    // below the status bar (y-axis)
+    // 使用 windowInsetsTopHeight() 添加一个 Spacer，将抽屉内容向下推
+    // 以避开状态栏 (Status Bar) 区域
     Column {
         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
         DrawerHeader()
@@ -98,6 +111,10 @@ fun JetchatDrawerContent(onProfileClicked: (String) -> Unit, onChatClicked: (Str
     }
 }
 
+/**
+ * 抽屉头部组件。
+ * 显示 Jetchat 图标和 Logo 文字。
+ */
 @Composable
 private fun DrawerHeader() {
     Row(modifier = Modifier.padding(16.dp), verticalAlignment = CenterVertically) {
@@ -113,6 +130,11 @@ private fun DrawerHeader() {
     }
 }
 
+/**
+ * 抽屉列表分组标题。
+ *
+ * @param text 标题文本。
+ */
 @Composable
 private fun DrawerItemHeader(text: String) {
     Box(
@@ -129,6 +151,13 @@ private fun DrawerItemHeader(text: String) {
     }
 }
 
+/**
+ * 聊天列表项组件。
+ *
+ * @param text 聊天名称。
+ * @param selected 是否被选中。
+ * @param onChatClicked 点击回调。
+ */
 @Composable
 private fun ChatItem(text: String, selected: Boolean, onChatClicked: () -> Unit) {
     val background = if (selected) {
@@ -170,6 +199,14 @@ private fun ChatItem(text: String, selected: Boolean, onChatClicked: () -> Unit)
     }
 }
 
+/**
+ * 个人资料列表项组件。
+ *
+ * @param text 用户名。
+ * @param profilePic 头像资源 ID。
+ * @param selected 是否被选中。
+ * @param onProfileClicked 点击回调。
+ */
 @Composable
 private fun ProfileItem(text: String, @DrawableRes profilePic: Int?, selected: Boolean = false, onProfileClicked: () -> Unit) {
     val background = if (selected) {
@@ -209,6 +246,9 @@ private fun ProfileItem(text: String, @DrawableRes profilePic: Int?, selected: B
     }
 }
 
+/**
+ * 分隔线组件。
+ */
 @Composable
 fun DividerItem(modifier: Modifier = Modifier) {
     HorizontalDivider(
@@ -217,6 +257,9 @@ fun DividerItem(modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * 抽屉内容的预览。
+ */
 @Composable
 @Preview
 fun DrawerPreview() {
@@ -229,6 +272,9 @@ fun DrawerPreview() {
     }
 }
 
+/**
+ * 暗色主题下抽屉内容的预览。
+ */
 @Composable
 @Preview
 fun DrawerPreviewDark() {
@@ -241,6 +287,10 @@ fun DrawerPreviewDark() {
     }
 }
 
+/**
+ * Widget 添加选项组件。
+ * 仅在支持将 Widget 固定到主屏幕的设备上显示 (Android O 及以上)。
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun WidgetDiscoverability() {
@@ -265,6 +315,9 @@ private fun WidgetDiscoverability() {
     }
 }
 
+/**
+ * 请求将 App Widget 添加到主屏幕。
+ */
 @RequiresApi(Build.VERSION_CODES.O)
 private fun addWidgetToHomeScreen(context: Context) {
     val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -274,6 +327,9 @@ private fun addWidgetToHomeScreen(context: Context) {
     }
 }
 
+/**
+ * 检查是否支持将 Widget 固定到主屏幕。
+ */
 @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.O)
 private fun widgetAddingIsSupported(context: Context): Boolean {
     return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
