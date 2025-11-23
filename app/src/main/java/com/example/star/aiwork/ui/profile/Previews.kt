@@ -28,6 +28,12 @@ import com.example.star.aiwork.ui.theme.JetchatTheme
  * 这些预览展示了在不同宽度、不同主题（亮色/暗色）以及查看不同用户（自己/他人）时的 UI 表现。
  */
 
+/**
+ * 个人资料屏幕的各种预览配置。
+ *
+ * 这些预览展示了在不同宽度、不同主题（亮色/暗色）以及查看不同用户（自己/他人）时的 UI 表现。
+ */
+
 @Preview(widthDp = 340, name = "340 width - Me")
 @Composable
 fun ProfilePreview340() {
