@@ -43,13 +43,13 @@ class ChatCompletionsAPI(
      *
      * 发送 POST 请求并等待完整响应，然后解析为 MessageChunk。
      *
-     * @param providerSetting OpenAI 提供商设置。
+     * @param providerSetting OpenAI 兼容提供商设置。
      * @param messages 聊天历史消息列表。
      * @param params 文本生成参数。
      * @return 包含生成内容的 MessageChunk。
      */
     suspend fun generateText(
-        providerSetting: ProviderSetting.OpenAI,
+        providerSetting: ProviderSetting.OpenAICompatible,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
@@ -70,13 +70,13 @@ class ChatCompletionsAPI(
      *
      * 发送请求并建立 SSE (Server-Sent Events) 连接，逐行读取响应数据。
      *
-     * @param providerSetting OpenAI 提供商设置。
+     * @param providerSetting OpenAI 兼容提供商设置。
      * @param messages 聊天历史消息列表。
      * @param params 文本生成参数。
      * @return 发出 MessageChunk 的 Flow 数据流。
      */
     suspend fun streamText(
-        providerSetting: ProviderSetting.OpenAI,
+        providerSetting: ProviderSetting.OpenAICompatible,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = flow {
@@ -139,7 +139,7 @@ class ChatCompletionsAPI(
      * @param stream 是否启用流式传输。
      */
     private fun buildRequest(
-        providerSetting: ProviderSetting.OpenAI,
+        providerSetting: ProviderSetting.OpenAICompatible,
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean

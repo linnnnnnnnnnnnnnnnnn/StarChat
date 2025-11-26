@@ -109,7 +109,7 @@ import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import com.example.star.aiwork.R
 import com.example.star.aiwork.data.exampleUiState
-import com.example.star.aiwork.data.provider.OpenAIProvider
+import com.example.star.aiwork.data.provider.ProviderFactory
 import com.example.star.aiwork.domain.TextGenerationParams
 import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.model.ProviderSetting
@@ -251,7 +251,6 @@ fun ConversationContent(
             .addInterceptor(AIRequestInterceptor())
             .build()
     }
-    val provider = remember { OpenAIProvider(client) }
     
     // 根据 ID 选择当前的 Provider 和 Model
     val providerSetting = remember(providerSettings, activeProviderId) { 
@@ -259,6 +258,30 @@ fun ConversationContent(
     }
     val model = remember(providerSetting, activeModelId) { 
         providerSetting?.models?.find { it.modelId == activeModelId } ?: providerSetting?.models?.firstOrNull() 
+    }
+    
+    // 使用 ProviderFactory 获取 provider 实例
+    val provider = remember(providerSetting) {
+        if (providerSetting != null) {
+            ProviderFactory.getProvider(providerSetting, client)
+        } else {
+            null
+        }
+    }
+    
+    // 获取 Ollama 兜底 Provider
+    val fallbackProviderSetting = remember(providerSettings) {
+        providerSettings.find { it is ProviderSetting.Ollama && it.enabled }
+    }
+    val fallbackProvider = remember(fallbackProviderSetting) {
+        if (fallbackProviderSetting != null) {
+             ProviderFactory.getProvider(fallbackProviderSetting, client)
+        } else {
+            null
+        }
+    }
+    val fallbackModel = remember(fallbackProviderSetting) {
+        fallbackProviderSetting?.models?.firstOrNull()
     }
 
     // 初始化用于语音转文本的音频录制器和 WebSocket
@@ -392,15 +415,81 @@ fun ConversationContent(
                         }
                         
                         // 2. 调用 LLM 获取响应
-                        if (providerSetting != null && model != null) {
-                            // 检查提供商是否兼容
-                            if (providerSetting !is ProviderSetting.OpenAI) {
-                                 uiState.addMessage(
-                                    Message("System", "Currently only OpenAI compatible providers are supported.", timeNow)
-                                )
-                                return
-                            }
+                        if (providerSetting != null && model != null && provider != null) {
+                            // 注意：这里不需要再检查是否兼容 OpenAI，Provider 接口已经统一了
                             
+                            // 定义请求执行逻辑，支持失败重试（降级）
+                            suspend fun executeRequest(
+                                currentProvider: com.example.star.aiwork.domain.Provider<ProviderSetting>,
+                                currentSetting: ProviderSetting,
+                                currentModel: com.example.star.aiwork.domain.model.Model,
+                                currentMessages: List<UIMessage>,
+                                isFallback: Boolean = false
+                            ): String {
+                                var fullResponse = ""
+                                try {
+                                     if (uiState.streamResponse) {
+                                        // 调用 streamText 进行流式响应
+                                        currentProvider.streamText(
+                                            providerSetting = currentSetting,
+                                            messages = currentMessages,
+                                            params = TextGenerationParams(
+                                                model = currentModel,
+                                                temperature = uiState.temperature,
+                                                maxTokens = uiState.maxTokens
+                                            )
+                                        ).collect { chunk ->
+                                            withContext(Dispatchers.Main) {
+                                                val deltaContent = chunk.choices.firstOrNull()?.delta?.toText() ?: ""
+                                                if (deltaContent.isNotEmpty()) {
+                                                    uiState.appendToLastMessage(deltaContent)
+                                                    fullResponse += deltaContent
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // 调用 generateText 进行非流式响应
+                                        val response = currentProvider.generateText(
+                                            providerSetting = currentSetting,
+                                            messages = currentMessages,
+                                            params = TextGenerationParams(
+                                                model = currentModel,
+                                                temperature = uiState.temperature,
+                                                maxTokens = uiState.maxTokens
+                                            )
+                                        )
+                                        val content = response.choices.firstOrNull()?.message?.toText() ?: ""
+                                        fullResponse = content
+                                        withContext(Dispatchers.Main) {
+                                            if (content.isNotEmpty()) {
+                                                 uiState.appendToLastMessage(content)
+                                            }
+                                        }
+                                    }
+                                    return fullResponse
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    if (!isFallback && fallbackProvider != null && fallbackProviderSetting != null && fallbackModel != null) {
+                                        withContext(Dispatchers.Main) {
+                                            uiState.appendToLastMessage("\n\n[System: Primary model failed, switching to Ollama fallback...]\n\n")
+                                        }
+                                        // 递归调用自身，使用降级 Provider
+                                        @Suppress("UNCHECKED_CAST")
+                                        val typedFallbackProvider = fallbackProvider as com.example.star.aiwork.domain.Provider<ProviderSetting>
+                                        return executeRequest(
+                                            currentProvider = typedFallbackProvider,
+                                            currentSetting = fallbackProviderSetting,
+                                            currentModel = fallbackModel,
+                                            currentMessages = currentMessages,
+                                            isFallback = true
+                                        )
+                                    } else {
+                                        throw e
+                                    }
+                                }
+                            }
+
+
                             try {
                                 val activeAgent = uiState.activeAgent
                                 
@@ -503,46 +592,14 @@ fun ConversationContent(
                                     Message("AI", "", timeNow)
                                 )
 
-                                var fullResponse = ""
-
-                                if (uiState.streamResponse) {
-                                    // 调用 streamText 进行流式响应
-                                    provider.streamText(
-                                        providerSetting = providerSetting,
-                                        messages = messagesToSend,
-                                        params = TextGenerationParams(
-                                            model = model,
-                                            temperature = uiState.temperature,
-                                            maxTokens = uiState.maxTokens
-                                        )
-                                    ).collect { chunk ->
-                                        withContext(Dispatchers.Main) {
-                                            val deltaContent = chunk.choices.firstOrNull()?.delta?.toText() ?: ""
-                                            if (deltaContent.isNotEmpty()) {
-                                                uiState.appendToLastMessage(deltaContent)
-                                                fullResponse += deltaContent
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // 调用 generateText 进行非流式响应
-                                    val response = provider.generateText(
-                                        providerSetting = providerSetting,
-                                        messages = messagesToSend,
-                                        params = TextGenerationParams(
-                                            model = model,
-                                            temperature = uiState.temperature,
-                                            maxTokens = uiState.maxTokens
-                                        )
-                                    )
-                                    val content = response.choices.firstOrNull()?.message?.toText() ?: ""
-                                    fullResponse = content
-                                    withContext(Dispatchers.Main) {
-                                        if (content.isNotEmpty()) {
-                                             uiState.appendToLastMessage(content)
-                                        }
-                                    }
-                                }
+                                // 动态转换 Provider 以匹配泛型要求 (使用 unchecked cast 或者通过 when 智能转换)
+                                // 由于 Provider 接口是泛型的，这里我们需要小心处理
+                                // 最简单的方法是使用 star projection 或 unchecked cast，因为我们在逻辑上保证了 ProviderSetting 类型是匹配的
+                                @Suppress("UNCHECKED_CAST")
+                                val typedProvider = provider as com.example.star.aiwork.domain.Provider<ProviderSetting>
+                                
+                                // 执行请求 (包含兜底逻辑)
+                                val fullResponse = executeRequest(typedProvider, providerSetting, model, messagesToSend)
 
                                 // --- Auto-Loop Logic with Planner ---
                                 if (uiState.isAutoLoopEnabled && loopCount < uiState.maxLoopCount && fullResponse.isNotBlank()) {
@@ -563,7 +620,7 @@ fun ConversationContent(
                                     )
 
                                     // 使用相同的 provider/model 进行规划（也可以换一个更快的）
-                                    val plannerResponse = provider.generateText(
+                                    val plannerResponse = typedProvider.generateText(
                                         providerSetting = providerSetting,
                                         messages = plannerMessages,
                                         params = TextGenerationParams(

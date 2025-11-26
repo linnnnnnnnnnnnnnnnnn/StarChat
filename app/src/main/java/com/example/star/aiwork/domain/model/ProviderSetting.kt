@@ -50,6 +50,13 @@ sealed class ProviderSetting {
         shortDescription: @Composable (() -> Unit) = this.shortDescription,
     ): ProviderSetting
 
+    interface OpenAICompatible {
+        val apiKey: String
+        val baseUrl: String
+        val chatCompletionsPath: String
+        val proxy: ProviderProxy
+    }
+
     /**
      * OpenAI 兼容提供商设置。
      * 适用于官方 OpenAI API 以及所有兼容 OpenAI 接口格式的第三方服务（如 DeepSeek, Moonshot 等）。
@@ -71,11 +78,11 @@ sealed class ProviderSetting {
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
-        var baseUrl: String = "https://api.openai.com/v1",
-        var chatCompletionsPath: String = "/chat/completions",
+        override var apiKey: String = "",
+        override var baseUrl: String = "https://api.openai.com/v1",
+        override var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
-    ) : ProviderSetting() {
+    ) : ProviderSetting(), OpenAICompatible {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
         }
@@ -119,6 +126,73 @@ sealed class ProviderSetting {
                 proxy = proxy,
                 balanceOption = balanceOption,
                 shortDescription = shortDescription
+            )
+        }
+    }
+
+    /**
+     * Ollama 提供商设置。
+     * 专用于接入本地 Ollama 服务。
+     */
+    @Serializable
+    @SerialName("ollama")
+    data class Ollama(
+        override var id: String = UUID.randomUUID().toString(),
+        override var enabled: Boolean = true,
+        override var name: String = "Ollama",
+        override var models: List<Model> = emptyList(),
+        override var proxy: ProviderProxy = ProviderProxy.None,
+        override val balanceOption: BalanceOption = BalanceOption(),
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        override var apiKey: String = "ollama", // Ollama typically doesn't require a key, but some libs expect one
+        override var baseUrl: String = "http://localhost:11434",
+        override var chatCompletionsPath: String = "/api/chat",
+    ) : ProviderSetting(), OpenAICompatible {
+        override fun addModel(model: Model): ProviderSetting {
+            return copy(models = models + model)
+        }
+
+        override fun editModel(model: Model): ProviderSetting {
+            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        }
+
+        override fun delModel(model: Model): ProviderSetting {
+            return copy(models = models.filter { it.id != model.id })
+        }
+
+        override fun moveMove(
+            from: Int,
+            to: Int
+        ): ProviderSetting {
+            return copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+        }
+
+        override fun copyProvider(
+            id: String,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            proxy: ProviderProxy,
+            balanceOption: BalanceOption,
+            builtIn: Boolean,
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting {
+            return this.copy(
+                id = id,
+                enabled = enabled,
+                name = name,
+                models = models,
+                builtIn = builtIn,
+                description = description,
+                shortDescription = shortDescription,
+                proxy = proxy,
+                balanceOption = balanceOption
             )
         }
     }
@@ -272,6 +346,7 @@ sealed class ProviderSetting {
         val Types by lazy {
             listOf(
                 OpenAI::class,
+                Ollama::class,
                 Google::class,
                 Claude::class,
             )

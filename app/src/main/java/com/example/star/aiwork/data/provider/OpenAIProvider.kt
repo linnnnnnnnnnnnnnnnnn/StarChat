@@ -26,7 +26,6 @@ import com.example.star.aiwork.infra.util.KeyRoulette
 import com.example.star.aiwork.infra.util.configureClientWithProxy
 import com.example.star.aiwork.infra.util.getByKey
 import com.example.star.aiwork.infra.util.json
-import com.example.star.aiwork.infra.util.jsonPrimitiveOrNull
 import com.example.star.aiwork.infra.util.mergeCustomBody
 import com.example.star.aiwork.infra.util.toHeaders
 import com.example.star.aiwork.infra.util.await
@@ -34,7 +33,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.math.BigDecimal
 
 /**
  * OpenAI 提供商实现。
@@ -79,8 +77,15 @@ class OpenAIProvider(
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
 
-            val bodyStr = response.body?.string() ?: ""
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+            val bodyStr = response.body?.string()
+            if (bodyStr.isNullOrBlank()) return@withContext emptyList()
+            
+            val bodyJson = try {
+                json.parseToJsonElement(bodyStr).jsonObject
+            } catch (e: Exception) {
+                return@withContext emptyList()
+            }
+            
             val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
 
             data.mapNotNull { modelJson ->
@@ -116,8 +121,15 @@ class OpenAIProvider(
             error("Failed to get balance: ${response.code} ${response.body?.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val bodyStr = response.body?.string()
+        if (bodyStr.isNullOrBlank()) error("Empty response body for balance")
+
+        val bodyJson = try {
+            json.parseToJsonElement(bodyStr).jsonObject
+        } catch (e: Exception) {
+             throw RuntimeException("Invalid JSON response for balance: $bodyStr", e)
+        }
+        
         val value = bodyJson.getByKey(providerSetting.balanceOption.resultPath)
         val digitalValue = value.toFloatOrNull()
         if(digitalValue != null) {
@@ -216,8 +228,15 @@ class OpenAIProvider(
             error("Failed to generate image: ${response.code} ${response.body?.string()}")
         }
 
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        val bodyStr = response.body?.string()
+        if (bodyStr.isNullOrBlank()) error("Empty response body for image generation")
+
+        val bodyJson = try {
+            json.parseToJsonElement(bodyStr).jsonObject
+        } catch (e: Exception) {
+            throw RuntimeException("Invalid JSON response for image generation: $bodyStr", e)
+        }
+        
         val data = bodyJson["data"]?.jsonArray ?: error("No data in response")
 
         // 解析返回的图片数据

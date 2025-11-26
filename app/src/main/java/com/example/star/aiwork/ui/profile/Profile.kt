@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.example.star.aiwork.data.provider.OllamaProvider
 import com.example.star.aiwork.data.provider.OpenAIProvider
 import com.example.star.aiwork.domain.model.ProviderSetting
 import kotlinx.coroutines.launch
@@ -51,25 +53,47 @@ fun ProfileScreen(
     onSelectModel: (String, String) -> Unit,
     onBack: () -> Unit = {}
 ) {
+    var showAddProviderDialog by remember { mutableStateOf(false) }
+
+    if (showAddProviderDialog) {
+        AddProviderDialog(
+            onDismiss = { showAddProviderDialog = false },
+            onAdd = { type ->
+                val newProvider = when (type) {
+                    "OpenAI" -> ProviderSetting.OpenAI(
+                        id = UUID.randomUUID().toString(),
+                        name = "New OpenAI",
+                        apiKey = "",
+                        baseUrl = "https://api.openai.com/v1"
+                    )
+                    "Ollama" -> ProviderSetting.Ollama(
+                        id = UUID.randomUUID().toString(),
+                        name = "New Ollama",
+                        apiKey = "ollama",
+                        baseUrl = "http://localhost:11434",
+                        chatCompletionsPath = "/api/chat"
+                    )
+                    else -> null
+                }
+                if (newProvider != null) {
+                    onUpdateSettings(providerSettings + newProvider)
+                }
+                showAddProviderDialog = false
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Model & Key Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        val newProvider = ProviderSetting.OpenAI(
-                            id = UUID.randomUUID().toString(),
-                            name = "New Provider",
-                            apiKey = "",
-                            baseUrl = "https://api.openai.com/v1"
-                        )
-                        onUpdateSettings(providerSettings + newProvider)
-                    }) {
+                    IconButton(onClick = { showAddProviderDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Provider")
                     }
                 }
@@ -104,6 +128,33 @@ fun ProfileScreen(
 }
 
 @Composable
+fun AddProviderDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Provider Type") },
+        text = {
+            Column {
+                ListItem(
+                    headlineContent = { Text("OpenAI Compatible") },
+                    modifier = Modifier.clickable { onAdd("OpenAI") }
+                )
+                HorizontalDivider()
+                ListItem(
+                    headlineContent = { Text("Ollama (Local)") },
+                    modifier = Modifier.clickable { onAdd("Ollama") }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
 fun ProviderCard(
     provider: ProviderSetting,
     activeProviderId: String?,
@@ -122,6 +173,7 @@ fun ProviderCard(
         mutableStateOf(
             when (provider) {
                 is ProviderSetting.OpenAI -> provider.apiKey
+                is ProviderSetting.Ollama -> provider.apiKey
                 is ProviderSetting.Google -> provider.apiKey
                 is ProviderSetting.Claude -> provider.apiKey
             }
@@ -131,6 +183,7 @@ fun ProviderCard(
         mutableStateOf(
             when (provider) {
                 is ProviderSetting.OpenAI -> provider.baseUrl
+                is ProviderSetting.Ollama -> provider.baseUrl
                 is ProviderSetting.Google -> provider.baseUrl
                 is ProviderSetting.Claude -> provider.baseUrl
             }
@@ -178,6 +231,7 @@ fun ProviderCard(
                             onUpdate(
                                 when (provider) {
                                     is ProviderSetting.OpenAI -> provider.copy(enabled = enabled)
+                                    is ProviderSetting.Ollama -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Google -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Claude -> provider.copy(enabled = enabled)
                                 }
@@ -243,6 +297,7 @@ fun ProviderCard(
                                     try {
                                         val tempSetting = when (provider) {
                                             is ProviderSetting.OpenAI -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
+                                            is ProviderSetting.Ollama -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             else -> provider
                                         }
 
@@ -250,6 +305,13 @@ fun ProviderCard(
                                             val client = OkHttpClient()
                                             val openAIProvider = OpenAIProvider(client)
                                             val models = openAIProvider.listModels(tempSetting)
+                                            
+                                            onUpdate(tempSetting.copy(name = name, models = models))
+                                            Toast.makeText(context, "Connected! Found ${models.size} models.", Toast.LENGTH_SHORT).show()
+                                        } else if (tempSetting is ProviderSetting.Ollama) {
+                                            val client = OkHttpClient()
+                                            val ollamaProvider = OllamaProvider(client)
+                                            val models = ollamaProvider.listModels(tempSetting)
                                             
                                             onUpdate(tempSetting.copy(name = name, models = models))
                                             Toast.makeText(context, "Connected! Found ${models.size} models.", Toast.LENGTH_SHORT).show()
