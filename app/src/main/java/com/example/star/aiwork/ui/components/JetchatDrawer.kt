@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerState
@@ -86,6 +87,7 @@ fun JetchatDrawer(
     onChatClicked: (String) -> Unit,
     onProfileClicked: (String) -> Unit,
     onAgentClicked: (Agent) -> Unit = {},
+    onImportPdfClicked: () -> Unit = {},
     agents: List<Agent> = emptyList(),
     sessions: List<SessionEntity> = emptyList(),
     selectedMenu: String = "",
@@ -100,6 +102,7 @@ fun JetchatDrawer(
                         onProfileClicked = onProfileClicked,
                         onChatClicked = onChatClicked,
                         onAgentClicked = onAgentClicked,
+                        onImportPdfClicked = onImportPdfClicked,
                         agents = agents,
                         sessions = sessions,
                         selectedMenu = selectedMenu
@@ -130,6 +133,7 @@ fun JetchatDrawerContent(
     onProfileClicked: (String) -> Unit, 
     onChatClicked: (String) -> Unit, 
     onAgentClicked: (Agent) -> Unit,
+    onImportPdfClicked: () -> Unit,
     agents: List<Agent>,
     sessions: List<SessionEntity>,
     selectedMenu: String
@@ -155,6 +159,15 @@ fun JetchatDrawerContent(
                 selected = false, // Can be updated to track selection
                 onAgentClicked = { onAgentClicked(agent) }
             )
+        }
+
+        DividerItem(modifier = Modifier.padding(horizontal = 28.dp))
+        DrawerItemHeader("Knowledge Base")
+        KnowledgeItem(
+            "Import PDF",
+            false
+        ) {
+            onImportPdfClicked()
         }
 
         DividerItem(modifier = Modifier.padding(horizontal = 28.dp))
@@ -350,6 +363,43 @@ private fun SettingsItem(text: String, selected: Boolean = false, onProfileClick
             contentDescription = null
         )
         
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(start = 12.dp),
+        )
+    }
+}
+
+@Composable
+private fun KnowledgeItem(text: String, selected: Boolean = false, onClick: () -> Unit) {
+    val background = if (selected) {
+        Modifier.background(MaterialTheme.colorScheme.primaryContainer)
+    } else {
+        Modifier
+    }
+    Row(
+        modifier = Modifier
+            .height(56.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .clip(CircleShape)
+            .then(background)
+            .clickable(onClick = onClick),
+        verticalAlignment = CenterVertically,
+    ) {
+        val paddingSizeModifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
+            .size(24.dp)
+
+        Icon(
+            imageVector = Icons.Default.Description,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = paddingSizeModifier,
+            contentDescription = null
+        )
+
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
