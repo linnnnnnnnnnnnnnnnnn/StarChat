@@ -68,6 +68,7 @@ import com.example.star.aiwork.R
 import com.example.star.aiwork.data.colleagueProfile
 import com.example.star.aiwork.data.meProfile
 import com.example.star.aiwork.domain.model.Agent
+import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.ui.theme.JetchatTheme
 import com.example.star.aiwork.ui.widget.WidgetReceiver
 
@@ -86,7 +87,8 @@ fun JetchatDrawer(
     onProfileClicked: (String) -> Unit,
     onAgentClicked: (Agent) -> Unit = {},
     agents: List<Agent> = emptyList(),
-    selectedMenu: String = "composers",
+    sessions: List<SessionEntity> = emptyList(),
+    selectedMenu: String = "",
     content: @Composable () -> Unit,
 ) {
     JetchatTheme {
@@ -99,6 +101,7 @@ fun JetchatDrawer(
                         onChatClicked = onChatClicked,
                         onAgentClicked = onAgentClicked,
                         agents = agents,
+                        sessions = sessions,
                         selectedMenu = selectedMenu
                     )
                 }
@@ -128,7 +131,8 @@ fun JetchatDrawerContent(
     onChatClicked: (String) -> Unit, 
     onAgentClicked: (Agent) -> Unit,
     agents: List<Agent>,
-    selectedMenu: String = "composers"
+    sessions: List<SessionEntity>,
+    selectedMenu: String
 ) {
     // 使用 windowInsetsTopHeight() 添加一个 Spacer，将抽屉内容向下推
     // 以避开状态栏 (Status Bar) 区域
@@ -137,13 +141,12 @@ fun JetchatDrawerContent(
         DrawerHeader()
         DividerItem()
         DrawerItemHeader("Chats")
-        ChatItem("composers", selectedMenu == "composers") {
-            onChatClicked("composers")
+
+        sessions.forEach { session ->
+            ChatItem(session.name, selectedMenu == session.id) {
+                onChatClicked(session.id)
+            }
         }
-        ChatItem("droidcon-nyc", selectedMenu == "droidcon-nyc") {
-            onChatClicked("droidcon-nyc")
-        }
-        
         DividerItem(modifier = Modifier.padding(horizontal = 28.dp))
         DrawerItemHeader("Agents (Prompts)")
         agents.forEach { agent ->
@@ -376,7 +379,7 @@ fun DrawerPreview() {
     JetchatTheme {
         Surface {
             Column {
-                JetchatDrawerContent({}, {}, {}, emptyList())
+                JetchatDrawerContent({}, {}, {}, emptyList(),emptyList(),"")
             }
         }
     }
@@ -391,7 +394,7 @@ fun DrawerPreviewDark() {
     JetchatTheme(isDarkTheme = true) {
         Surface {
             Column {
-                JetchatDrawerContent({}, {}, {}, emptyList())
+                JetchatDrawerContent({}, {}, {}, emptyList(), emptyList(),"")
             }
         }
     }
