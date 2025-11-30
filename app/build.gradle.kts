@@ -149,7 +149,6 @@ dependencies {
     // Coil
     implementation(libs.coil.kt.compose)
 
-}
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

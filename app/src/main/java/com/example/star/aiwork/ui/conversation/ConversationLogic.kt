@@ -161,43 +161,37 @@ class ConversationLogic(
                 // 如果从历史中取出的最后一条和当前输入重复（或 UI 已经添加了），需要小心处理
                 // 注意：我们在前面 UI 上添加的是 raw inputContent，但发送给 LLM 的是 finalUserContent (augmented)
                 // 历史记录里存的是 raw content。所以 contextMessages 里的最后一条也是 raw content。
-                // 我们现在要添加当前这一轮的“真实”请求（包含 context）。
-                
+                // 我们现在要添加当前这一轮的"真实"请求（包含 context）。
+
                 // 如果 contextMessages 中已经包含了用户刚刚发的 raw message (因为我们先 addMessage 到 uiState)，
                 // 我们可能不想重复发一遍 raw message，而是发 augmented version。
                 // uiState.messages 包含所有显示的消息。
                 // 我们刚才 `uiState.addMessage` 添加了 inputContent。
                 // `uiState.messages` 最前面是刚刚添加的消息。
                 // `contextMessages` 是 takeLast(10) 并且 asReversed()，所以它包含了刚刚添加的消息作为最后一条。
-                
+
                 // 我们需要把最后一条（即当前的 raw input）替换为 augmented input，或者干脆移除它，单独添加 finalUserContent。
                 if (messagesToSend.isNotEmpty() && messagesToSend.last().role == MessageRole.USER) {
-                     // 简单起见，我们移除它，并用我们构造的 finalUserContent 代替
-                     messagesToSend.removeAt(messagesToSend.lastIndex)
+                    // 简单起见，我们移除它，并用我们构造的 finalUserContent 代替
+                    messagesToSend.removeAt(messagesToSend.lastIndex)
                 }
 
                 // 构建当前消息 parts
-                val currentParts = mutableListOf<UIMessagePart>()
-                if (finalUserContent.isNotEmpty()) {
-                    currentParts.add(UIMessagePart.Text(finalUserContent))
-                }
+                val currentMessageParts = mutableListOf<UIMessagePart>()
+                currentMessageParts.add(UIMessagePart.Text(finalUserContent))
 
-                // 如果有图片（且不是自动循环），读取并转换为 Base64 添加到 parts
-                // 注意：如果是重试 (isRetry)，图片 URI 可能已经被清空 (selectedImageUri = null)，
-                // 但是图片 URL 已经保存在 UI 消息历史中。我们需要从历史中获取。
+                // 如果用户选择了图片，也加入到当前输入中
                 if (!isAutoTriggered) {
-                    // 查找最新一条用户消息
                     val lastUserMsg = uiState.messages.firstOrNull { it.author == authorMe && it.author != "System" }
                     if (lastUserMsg?.imageUrl != null) {
                         try {
                             val imageUri = Uri.parse(lastUserMsg.imageUrl)
-                            // 读取图片并转 Base64
                             val base64Image = context.contentResolver.openInputStream(imageUri)?.use { inputStream ->
                                 inputStream.readBytes().toBase64()
                             }
                             if (base64Image != null) {
                                 val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
-                                currentParts.add(UIMessagePart.Image(url = "data:$mimeType;base64,$base64Image"))
+                                currentMessageParts.add(UIMessagePart.Image(url = "data:$mimeType;base64,$base64Image"))
                             }
                         } catch (e: Exception) {
                             e.printStackTrace()
@@ -207,14 +201,21 @@ class ConversationLogic(
 
                 messagesToSend.add(UIMessage(
                     role = MessageRole.USER,
-                    parts = currentParts
+                    parts = currentMessageParts
                 ))
 
-                // 添加初始空 AI 消息占位符
-                uiState.addMessage(
-                    Message("AI", "", timeNow)
+                val params = TextGenerationParams(
+                    model = model,
+                    temperature = uiState.temperature,
+                    maxTokens = uiState.maxTokens
                 )
 
+                // ✅ 添加一个带加载状态的空 AI 消息作为容器
+                withContext(Dispatchers.Main) {
+                    uiState.addMessage(Message("AI", "", timeNow, isLoading = true))
+                }
+
+                // 转换为 ChatDataItem
                 val historyChat = messagesToSend.dropLast(1).map { it.toChatDataItem() }
                 val userMessage = messagesToSend.last().toChatDataItem()
 
@@ -233,18 +234,19 @@ class ConversationLogic(
                 activeTaskId = sendResult.taskId
 
                 var fullResponse = ""
-                var lastUpdateTime = System.currentTimeMillis()
-                val UPDATE_INTERVAL_MS = 1000L // 每1秒更新一次数据库
-                
-                sendResult.stream.collect { delta ->
-                    if (delta.isNotBlank()) {
+                var lastUpdateTime = 0L
+                val UPDATE_INTERVAL_MS = 500L
+
+                if (uiState.streamResponse) {
+                    sendResult.stream.collect { delta ->
                         fullResponse += delta
-                        if (uiState.streamResponse) {
-                            withContext(Dispatchers.Main) {
-                                uiState.appendToLastMessage(delta)
+                        withContext(Dispatchers.Main) {
+                            // ✅ 第一次收到内容时，移除加载状态
+                            if (delta.isNotEmpty()) {
+                                uiState.updateLastMessageLoadingState(false)
                             }
-                            
-                            // 定期更新数据库中的助手消息（避免过于频繁的数据库操作）
+                            uiState.appendToLastMessage(delta)
+
                             val currentTime = System.currentTimeMillis()
                             if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
                                 persistenceGateway?.replaceLastAssistantMessage(
@@ -262,10 +264,12 @@ class ConversationLogic(
 
                 if (!uiState.streamResponse && fullResponse.isNotBlank()) {
                     withContext(Dispatchers.Main) {
+                        // ✅ 非流式响应时也要移除加载状态
+                        uiState.updateLastMessageLoadingState(false)
                         uiState.appendToLastMessage(fullResponse)
                     }
                 }
-                
+
                 // 流式响应结束后，更新最终内容到数据库（标记为完成状态）
                 if (fullResponse.isNotBlank()) {
                     persistenceGateway?.replaceLastAssistantMessage(
@@ -292,7 +296,7 @@ class ConversationLogic(
                         role = "user",
                         content = "Previous Response:\n$fullResponse"
                     )
-                    
+
                     val plannerHistory = listOf(
                         ChatDataItem(
                             role = "system",
@@ -306,7 +310,7 @@ class ConversationLogic(
                         temperature = 0.3f, // 使用较低温度以获得更确定的指令
                         maxTokens = 100
                     )
-                    
+
                     val plannerResult = sendMessageUseCase(
                         sessionId = sessionId + "_planner", // 使用不同的 sessionId 避免混淆
                         userMessage = plannerUserMessage,
@@ -314,7 +318,7 @@ class ConversationLogic(
                         providerSetting = providerSetting,
                         params = plannerParams
                     )
-                    
+
                     var nextInstruction = ""
                     plannerResult.stream.collect { delta ->
                         nextInstruction += delta
@@ -340,27 +344,25 @@ class ConversationLogic(
                 // 同时也处理 "请求参数无效" (LlmError.RequestError) 的情况，认为这也可能意味着免费策略失效
                 val errorMessage = e.message ?: ""
                 val causeMessage = e.cause?.message ?: ""
-                
+
                 val isFallbackInvalidated = errorMessage.contains("SiliconCloud fallback strategy invalidated") ||
-                                            causeMessage.contains("SiliconCloud fallback strategy invalidated")
+                        causeMessage.contains("SiliconCloud fallback strategy invalidated")
 
                 // 如果是 RequestError (通常表现为 422/400) 且我们正在尝试 SiliconCloud 的免费模型
                 // 这可能意味着之前的 "sk-..." key 彻底失效被拒了
                 val isRequestError = e.javaClass.simpleName.contains("RequestError") || errorMessage.contains("请求参数无效")
-                
+
                 // 如果是认证错误 (401/403)
                 val isAuthError = e.javaClass.simpleName.contains("AuthenticationError") || errorMessage.contains("认证失败")
 
                 if (isFallbackInvalidated || isRequestError || isAuthError) {
-                    // 移除刚刚添加的空 AI 消息 (如果有的话)，避免 UI 上留着一个空白的气泡
-                    // 通常 catch 会在流结束前发生，所以最后一条消息可能是空的 AI 消息
+                    // ✅ 移除加载状态的空消息
                     withContext(Dispatchers.Main) {
-                        // 如果最后一条是空的 AI 消息，移除它
                         val lastMsg = uiState.messages.firstOrNull()
-                        if (lastMsg?.author == "AI" && lastMsg.content.isEmpty()) {
+                        if (lastMsg?.author == "AI" && (lastMsg.content.isEmpty() || lastMsg.isLoading)) {
                             uiState.removeFirstMessage()
                         }
-                        
+
                         val reason = if (isFallbackInvalidated) "兜底失效" else "API 请求被拒 ($errorMessage)"
                         uiState.addMessage(Message("System", "SiliconCloud $reason，正在切换到本地 Ollama...", timeNow))
                     }
@@ -395,7 +397,13 @@ class ConversationLogic(
                     return
                 }
 
+                // ✅ 其他错误也移除加载状态
                 withContext(Dispatchers.Main) {
+                    val lastMsg = uiState.messages.firstOrNull()
+                    if (lastMsg?.author == "AI" && (lastMsg.content.isEmpty() || lastMsg.isLoading)) {
+                        uiState.removeFirstMessage()
+                    }
+
                     uiState.addMessage(
                         Message("System", "Error: ${e.message}", timeNow)
                     )

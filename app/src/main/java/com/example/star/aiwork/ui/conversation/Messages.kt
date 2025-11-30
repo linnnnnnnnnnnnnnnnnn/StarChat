@@ -16,26 +16,36 @@
 
 package com.example.star.aiwork.ui.conversation
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.paddingFrom
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,14 +58,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LastBaseline
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -64,8 +84,17 @@ import kotlinx.coroutines.launch
 
 const val ConversationTestTag = "ConversationTestTag"
 
+/**
+ * 消息列表组件
+ * 支持：Markdown渲染、智能复制、加载动画、图片显示
+ */
 @Composable
-fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrollState: LazyListState, modifier: Modifier = Modifier) {
+fun Messages(
+    messages: List<Message>,
+    navigateToProfile: (String) -> Unit,
+    scrollState: LazyListState,
+    modifier: Modifier = Modifier
+) {
     val scope = rememberCoroutineScope()
     Box(modifier = modifier) {
 
@@ -106,22 +135,20 @@ fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrol
                 }
             }
         }
-        // 当用户滚动超过阈值时显示跳转到底部按钮。
-        // 转换为像素：
+
+        // 跳转到底部按钮
         val jumpThreshold = with(LocalDensity.current) {
             JumpToBottomThreshold.toPx()
         }
 
-        // 如果第一个可见项不是第一个，或者偏移量大于阈值，则显示该按钮。
         val jumpToBottomButtonEnabled by remember {
             derivedStateOf {
                 scrollState.firstVisibleItemIndex != 0 ||
-                    scrollState.firstVisibleItemScrollOffset > jumpThreshold
+                        scrollState.firstVisibleItemScrollOffset > jumpThreshold
             }
         }
 
         JumpToBottom(
-            // 仅当滚动条不在底部时显示
             enabled = jumpToBottomButtonEnabled,
             onClicked = {
                 scope.launch {
@@ -133,6 +160,9 @@ fun Messages(messages: List<Message>, navigateToProfile: (String) -> Unit, scrol
     }
 }
 
+/**
+ * 单条消息组件 - 支持左右对齐
+ */
 @Composable
 fun Message(
     onAuthorClick: (String) -> Unit,
@@ -148,26 +178,33 @@ fun Message(
     }
 
     val spaceBetweenAuthors = if (isLastMessageByAuthor) Modifier.padding(top = 8.dp) else Modifier
-    Row(modifier = spaceBetweenAuthors) {
-        if (isLastMessageByAuthor) {
-            // 头像
-            Image(
-                modifier = Modifier
-                    .clickable(onClick = { onAuthorClick(msg.author) })
-                    .padding(horizontal = 16.dp)
-                    .size(42.dp)
-                    .border(1.5.dp, borderColor, CircleShape)
-                    .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                    .clip(CircleShape)
-                    .align(Alignment.Top),
-                painter = painterResource(id = msg.authorImage),
-                contentScale = ContentScale.Crop,
-                contentDescription = null,
-            )
-        } else {
-            // 头像下方的空间
-            Spacer(modifier = Modifier.width(74.dp))
+
+    Row(
+        modifier = spaceBetweenAuthors.fillMaxWidth(),
+        horizontalArrangement = if (isUserMe) Arrangement.End else Arrangement.Start
+    ) {
+        // 用户消息：右对齐，无头像
+        if (!isUserMe) {
+            // AI消息：左对齐，显示头像
+            if (isLastMessageByAuthor) {
+                Image(
+                    modifier = Modifier
+                        .clickable(onClick = { onAuthorClick(msg.author) })
+                        .padding(horizontal = 16.dp)
+                        .size(42.dp)
+                        .border(1.5.dp, borderColor, CircleShape)
+                        .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        .clip(CircleShape)
+                        .align(Alignment.Top),
+                    painter = painterResource(id = msg.authorImage),
+                    contentScale = ContentScale.Crop,
+                    contentDescription = null,
+                )
+            } else {
+                Spacer(modifier = Modifier.width(74.dp))
+            }
         }
+
         AuthorAndTextMessage(
             msg = msg,
             isUserMe = isUserMe,
@@ -175,12 +212,15 @@ fun Message(
             isLastMessageByAuthor = isLastMessageByAuthor,
             authorClicked = onAuthorClick,
             modifier = Modifier
-                .padding(end = 16.dp)
-                .weight(1f),
+                .padding(end = if (isUserMe) 16.dp else 16.dp)
+                .widthIn(max = 300.dp)
         )
     }
 }
 
+/**
+ * 消息内容容器 - 作者名 + 消息气泡
+ */
 @Composable
 fun AuthorAndTextMessage(
     msg: Message,
@@ -191,30 +231,30 @@ fun AuthorAndTextMessage(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        if (isLastMessageByAuthor) {
+        if (isLastMessageByAuthor && !isUserMe) {
             AuthorNameTimestamp(msg)
         }
         ChatItemBubble(msg, isUserMe, authorClicked = authorClicked)
         if (isFirstMessageByAuthor) {
-            // 下一个作者之前的最后一个气泡
             Spacer(modifier = Modifier.height(8.dp))
         } else {
-            // 气泡之间
             Spacer(modifier = Modifier.height(4.dp))
         }
     }
 }
 
+/**
+ * 作者名和时间戳
+ */
 @Composable
 private fun AuthorNameTimestamp(msg: Message) {
-    // 为辅助功能合并作者和时间戳。
     Row(modifier = Modifier.semantics(mergeDescendants = true) {}) {
         Text(
             text = msg.author,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier
                 .alignBy(LastBaseline)
-                .paddingFrom(LastBaseline, after = 8.dp), // 距离第一个气泡的空间
+                .paddingFrom(LastBaseline, after = 8.dp),
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
@@ -228,6 +268,9 @@ private fun AuthorNameTimestamp(msg: Message) {
 
 private val ChatBubbleShape = RoundedCornerShape(4.dp, 20.dp, 20.dp, 20.dp)
 
+/**
+ * 日期分隔线
+ */
 @Composable
 fun DayHeader(dayString: String) {
     Row(
@@ -256,29 +299,65 @@ private fun RowScope.DayHeaderLine() {
     )
 }
 
+/**
+ * 消息气泡 - 支持Markdown渲染、智能复制、加载动画
+ */
 @Composable
-fun ChatItemBubble(message: Message, isUserMe: Boolean, authorClicked: (String) -> Unit) {
-
+fun ChatItemBubble(
+    message: Message,
+    isUserMe: Boolean,
+    authorClicked: (String) -> Unit
+) {
     val backgroundBubbleColor = if (isUserMe) {
         MaterialTheme.colorScheme.primary
     } else {
         MaterialTheme.colorScheme.surfaceVariant
     }
 
+    val clipboardManager = LocalClipboardManager.current
+
     Column {
         Surface(
             color = backgroundBubbleColor,
             shape = ChatBubbleShape,
         ) {
-            ClickableMessage(
-                message = message,
-                isUserMe = isUserMe,
-                authorClicked = authorClicked,
-            )
+            Box {
+                // 消息内容
+                if (message.isLoading && message.content.isEmpty()) {
+                    // 加载动画
+                    LoadingIndicator()
+                } else {
+                    // Markdown渲染的消息内容
+                    MarkdownMessage(
+                        message = message,
+                        isUserMe = isUserMe,
+                        authorClicked = authorClicked
+                    )
+                }
+
+                // 智能复制按钮 - 仅AI消息且为纯文本显示
+                if (!isUserMe && isPureTextContent(message.content) && message.content.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(message.content))
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(32.dp)
+                            .padding(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
         }
-        
-        // 显示图片（如果存在）
-        // 优先使用 imageUrl (本地或网络URI), 其次是 image 资源ID
+
+        // 图片显示
         if (message.imageUrl != null) {
             Spacer(modifier = Modifier.height(4.dp))
             Surface(
@@ -309,32 +388,568 @@ fun ChatItemBubble(message: Message, isUserMe: Boolean, authorClicked: (String) 
     }
 }
 
+/**
+ * Markdown消息内容渲染 - 完整版
+ */
 @Composable
-fun ClickableMessage(message: Message, isUserMe: Boolean, authorClicked: (String) -> Unit) {
-    val uriHandler = LocalUriHandler.current
+fun MarkdownMessage(
+    message: Message,
+    isUserMe: Boolean,
+    authorClicked: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
 
-    val styledMessage = messageFormatter(
-        text = message.content,
-        primary = isUserMe,
-    )
+    val textColor = if (isUserMe) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
-    ClickableText(
-        text = styledMessage,
-        style = MaterialTheme.typography.bodyLarge.copy(color = LocalContentColor.current),
-        modifier = Modifier.padding(16.dp),
-        onClick = {
-            styledMessage
-                .getStringAnnotations(start = it, end = it)
-                .firstOrNull()
-                ?.let { annotation ->
-                    when (annotation.tag) {
-                        SymbolAnnotationType.LINK.name -> uriHandler.openUri(annotation.item)
-                        SymbolAnnotationType.PERSON.name -> authorClicked(annotation.item)
-                        else -> Unit
+    val codeBlockBackground = if (isUserMe) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+
+    val codeTextColor = if (isUserMe) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Column(modifier = Modifier.padding(16.dp)) {
+        SimpleMarkdownRenderer(
+            markdown = message.content,
+            textColor = textColor,
+            codeBlockBackground = codeBlockBackground,
+            codeTextColor = codeTextColor,
+            onCodeBlockCopy = { code ->
+                clipboardManager.setText(AnnotatedString(code))
+                Toast.makeText(context, "代码已复制", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+/**
+ * 代码块组件 - 带复制按钮
+ */
+@Composable
+fun CodeBlockWithCopyButton(
+    code: String,
+    language: String,
+    onCopy: () -> Unit,
+    backgroundColor: Color,
+    textColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Surface(
+            color = backgroundColor,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                // 代码块顶部栏
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = language,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = textColor.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
+                    IconButton(
+                        onClick = onCopy,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制代码",
+                            tint = textColor.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp)
+                        )
                     }
                 }
-        },
-    )
+
+                HorizontalDivider(
+                    color = textColor.copy(alpha = 0.1f),
+                    thickness = 1.dp
+                )
+
+                // 代码内容
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        color = textColor
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * AI思考中的加载动画
+ */
+@Composable
+fun LoadingIndicator() {
+    Box(
+        modifier = Modifier
+            .padding(16.dp)
+            .size(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(24.dp),
+            strokeWidth = 2.5.dp,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/**
+ * Markdown渲染器 - 支持代码块分离
+ */
+@Composable
+fun SimpleMarkdownRenderer(
+    markdown: String,
+    textColor: Color,
+    codeBlockBackground: Color,
+    codeTextColor: Color,
+    onCodeBlockCopy: (String) -> Unit
+) {
+    val codeBlockRegex = Regex("```([\\w]*)?\\n([\\s\\S]*?)```")
+    val matches = codeBlockRegex.findAll(markdown).toList()
+
+    if (matches.isEmpty()) {
+        // 没有代码块，渲染带格式的文本
+        RenderMarkdownText(markdown, textColor, codeBlockBackground)
+    } else {
+        // 有代码块，逐段渲染
+        var lastIndex = 0
+
+        Column {
+            matches.forEach { match ->
+                val beforeCode = markdown.substring(lastIndex, match.range.first)
+                if (beforeCode.isNotEmpty()) {
+                    RenderMarkdownText(beforeCode, textColor, codeBlockBackground)
+                }
+
+                val language = match.groupValues[1].takeIf { it.isNotEmpty() } ?: "text"
+                val code = match.groupValues[2].trim()
+
+                Spacer(modifier = Modifier.height(8.dp))
+                CodeBlockWithCopyButton(
+                    code = code,
+                    language = language,
+                    onCopy = { onCodeBlockCopy(code) },
+                    backgroundColor = codeBlockBackground,
+                    textColor = codeTextColor
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                lastIndex = match.range.last + 1
+            }
+
+            val afterCode = markdown.substring(lastIndex)
+            if (afterCode.isNotEmpty()) {
+                RenderMarkdownText(afterCode, textColor, codeBlockBackground)
+            }
+        }
+    }
+}
+
+/**
+ * 渲染Markdown文本 - 支持标题、列表、引用、表格等
+ */
+@Composable
+fun RenderMarkdownText(
+    markdown: String,
+    textColor: Color,
+    codeBlockBackground: Color
+) {
+    val lines = markdown.split("\n")
+    var inTable = false
+    val tableRows = mutableListOf<List<String>>()
+
+    Column {
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i].trimEnd()
+
+            // 处理表格
+            if (line.contains("|") && line.trim().startsWith("|")) {
+                if (!inTable) {
+                    inTable = true
+                    tableRows.clear()
+                }
+                tableRows.add(line.split("|").map { it.trim() }.filter { it.isNotEmpty() })
+                i++
+                continue
+            } else if (inTable) {
+                // 表格结束，渲染表格
+                if (tableRows.size >= 2) {
+                    RenderTable(tableRows, textColor, codeBlockBackground)
+                }
+                inTable = false
+                tableRows.clear()
+            }
+
+            // 处理分隔线
+            if (line.matches(Regex("^[-*_]{3,}$"))) {
+                HorizontalDivider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    color = textColor.copy(alpha = 0.3f)
+                )
+                i++
+                continue
+            }
+
+            // 处理标题
+            val headerMatch = Regex("^(#{1,6})\\s+(.+)$").find(line)
+            if (headerMatch != null) {
+                val level = headerMatch.groupValues[1].length
+                val text = headerMatch.groupValues[2]
+                Text(
+                    text = parseInlineMarkdown(text, textColor, codeBlockBackground),
+                    style = when (level) {
+                        1 -> MaterialTheme.typography.headlineLarge
+                        2 -> MaterialTheme.typography.headlineMedium
+                        3 -> MaterialTheme.typography.headlineSmall
+                        4 -> MaterialTheme.typography.titleLarge
+                        5 -> MaterialTheme.typography.titleMedium
+                        else -> MaterialTheme.typography.titleSmall
+                    },
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                i++
+                continue
+            }
+
+            // 处理无序列表
+            val unorderedListMatch = Regex("^[*-]\\s+(.+)$").find(line)
+            if (unorderedListMatch != null) {
+                val text = unorderedListMatch.groupValues[1]
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text(
+                        text = "• ",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = textColor,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = parseInlineMarkdown(text, textColor, codeBlockBackground),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                i++
+                continue
+            }
+
+            // 处理有序列表
+            val orderedListMatch = Regex("^(\\d+)\\.\\s+(.+)$").find(line)
+            if (orderedListMatch != null) {
+                val number = orderedListMatch.groupValues[1]
+                val text = orderedListMatch.groupValues[2]
+                Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                    Text(
+                        text = "$number. ",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = textColor,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = parseInlineMarkdown(text, textColor, codeBlockBackground),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+                i++
+                continue
+            }
+
+            // 处理引用块
+            val quoteMatch = Regex("^>\\s+(.+)$").find(line)
+            if (quoteMatch != null) {
+                val text = quoteMatch.groupValues[1]
+                Surface(
+                    color = codeBlockBackground.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                ) {
+                    Row {
+                        Box(
+                            modifier = Modifier
+                                .width(4.dp)
+                                .height(32.dp)
+                                .background(textColor.copy(alpha = 0.5f))
+                        )
+                        Text(
+                            text = parseInlineMarkdown(text, textColor, codeBlockBackground),
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontStyle = FontStyle.Italic
+                            ),
+                            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 12.dp)
+                        )
+                    }
+                }
+                i++
+                continue
+            }
+
+            // 处理普通段落
+            if (line.isNotEmpty()) {
+                Text(
+                    text = parseInlineMarkdown(line, textColor, codeBlockBackground),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            i++
+        }
+
+        // 如果最后还有未渲染的表格
+        if (inTable && tableRows.size >= 2) {
+            RenderTable(tableRows, textColor, codeBlockBackground)
+        }
+    }
+}
+
+/**
+ * 渲染Markdown表格
+ */
+@Composable
+fun RenderTable(
+    rows: List<List<String>>,
+    textColor: Color,
+    codeBlockBackground: Color
+) {
+    Surface(
+        color = codeBlockBackground.copy(alpha = 0.2f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            rows.forEachIndexed { rowIndex, cells ->
+                // 跳过分隔行（第二行通常是 |---|---|）
+                if (rowIndex == 1 && cells.all { it.matches(Regex("^:?-+:?$")) }) {
+                    HorizontalDivider(color = textColor.copy(alpha = 0.3f))
+                    return@forEachIndexed
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    cells.forEach { cell ->
+                        Text(
+                            text = parseInlineMarkdown(cell, textColor, codeBlockBackground),
+                            style = if (rowIndex == 0) {
+                                MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                            } else {
+                                MaterialTheme.typography.bodyMedium
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Markdown元素类型
+ */
+sealed class MarkdownElement {
+    data class Text(val content: String) : MarkdownElement()
+    data class CodeBlock(val code: String, val language: String) : MarkdownElement()
+}
+
+/**
+ * 渲染Markdown内容
+ */
+fun renderMarkdownContent(content: String, isUserMe: Boolean): List<MarkdownElement> {
+    val elements = mutableListOf<MarkdownElement>()
+    val codeBlockRegex = Regex("```(\\w*)\\n([\\s\\S]*?)```")
+    var lastIndex = 0
+
+    codeBlockRegex.findAll(content).forEach { match ->
+        // 添加代码块之前的文本
+        if (match.range.first > lastIndex) {
+            val textContent = content.substring(lastIndex, match.range.first).trim()
+            if (textContent.isNotEmpty()) {
+                elements.add(MarkdownElement.Text(textContent))
+            }
+        }
+
+        // 添加代码块
+        val language = match.groupValues[1].ifEmpty { "code" }
+        val code = match.groupValues[2].trim()
+        elements.add(MarkdownElement.CodeBlock(code, language))
+
+        lastIndex = match.range.last + 1
+    }
+
+    // 添加剩余文本
+    if (lastIndex < content.length) {
+        val textContent = content.substring(lastIndex).trim()
+        if (textContent.isNotEmpty()) {
+            elements.add(MarkdownElement.Text(textContent))
+        }
+    }
+
+    // 如果没有代码块，返回纯文本
+    if (elements.isEmpty() && content.isNotEmpty()) {
+        elements.add(MarkdownElement.Text(content))
+    }
+
+    return elements
+}
+
+/**
+ * 解析内联Markdown格式 - 完整版
+ */
+fun parseInlineMarkdown(
+    text: String,
+    baseColor: Color,
+    codeBlockBackground: Color
+): AnnotatedString {
+    return buildAnnotatedString {
+        var currentIndex = 0
+
+        // 定义所有匹配规则（优先级从高到低）
+        val patterns = listOf(
+            Regex("\\*\\*(.+?)\\*\\*") to "bold",        // **粗体**
+            Regex("__(.+?)__") to "bold",                // __粗体__
+            Regex("\\*(.+?)\\*") to "italic",            // *斜体*
+            Regex("_(.+?)_") to "italic",                // _斜体_
+            Regex("~~(.+?)~~") to "strikethrough",       // ~~删除线~~
+            Regex("`(.+?)`") to "code",                  // `行内代码`
+            Regex("\\[(.+?)\\]\\((.+?)\\)") to "link"    // [链接](url)
+        )
+
+        val allMatches = mutableListOf<Triple<IntRange, String, String>>()
+
+        // 收集所有匹配
+        patterns.forEach { (regex, type) ->
+            regex.findAll(text).forEach { match ->
+                val content = if (type == "link") {
+                    match.groupValues[1] // 链接文本
+                } else {
+                    match.groupValues[1]
+                }
+                allMatches.add(Triple(match.range, type, content))
+            }
+        }
+
+        // 按位置排序并去重（避免嵌套冲突）
+        val sortedMatches = allMatches
+            .sortedBy { it.first.first }
+            .fold(mutableListOf<Triple<IntRange, String, String>>()) { acc, match ->
+                if (acc.isEmpty() || match.first.first >= acc.last().first.last) {
+                    acc.add(match)
+                }
+                acc
+            }
+
+        sortedMatches.forEach { (range, type, content) ->
+            // 添加普通文本
+            if (currentIndex < range.first) {
+                append(text.substring(currentIndex, range.first))
+            }
+
+            when (type) {
+                "bold" -> {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = baseColor)) {
+                        append(content)
+                    }
+                }
+                "italic" -> {
+                    withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = baseColor)) {
+                        append(content)
+                    }
+                }
+                "strikethrough" -> {
+                    withStyle(SpanStyle(
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough,
+                        color = baseColor
+                    )) {
+                        append(content)
+                    }
+                }
+                "code" -> {
+                    withStyle(
+                        SpanStyle(
+                            fontFamily = FontFamily.Monospace,
+                            background = codeBlockBackground.copy(alpha = 0.3f),
+                            color = baseColor
+                        )
+                    ) {
+                        append(content)
+                    }
+                }
+                "link" -> {
+                    withStyle(
+                        SpanStyle(
+                            color = Color(0xFF2196F3), // 蓝色链接
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                        )
+                    ) {
+                        append(content)
+                    }
+                }
+            }
+
+            currentIndex = range.last + 1
+        }
+
+        // 添加剩余文本
+        if (currentIndex < text.length) {
+            append(text.substring(currentIndex))
+        }
+    }
+}
+
+/**
+ * 判断消息内容是否为纯文本
+ */
+fun isPureTextContent(content: String): Boolean {
+    if (content.isEmpty()) return false
+
+    val codeBlockRegex = Regex("```[\\s\\S]*?```")
+    if (codeBlockRegex.containsMatchIn(content)) return false
+
+    val tableRegex = Regex("\\|.+\\|")
+    if (tableRegex.containsMatchIn(content)) return false
+
+    val imageRegex = Regex("!\\[.*?\\]\\(.*?\\)")
+    if (imageRegex.containsMatchIn(content)) return false
+
+    return true
 }
 
 @Preview

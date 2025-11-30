@@ -17,6 +17,7 @@
 package com.example.star.aiwork.ui.conversation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column  // ⭐ 新增
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment  // ⭐ 新增
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -61,11 +63,20 @@ fun ChannelNameBar(
         scrollBehavior = scrollBehavior,
         onNavIconPressed = onNavIconPressed,
         title = {
-            // 频道名称
-            Text(
-                text = channelName,
-                style = MaterialTheme.typography.titleMedium,
-            )
+            // ✅ 使用你的双行布局
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 频道名称
+                Text(
+                    text = channelName,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                // 成员数量
+                Text(
+                    text = stringResource(R.string.members, channelMembers),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         },
         actions = {
             // 设置图标
@@ -85,6 +96,16 @@ fun ChannelNameBar(
                     .padding(horizontal = 12.dp, vertical = 16.dp)
                     .height(24.dp),
                 contentDescription = stringResource(id = R.string.search),
+            )
+            // ✅ 添加信息图标
+            Icon(
+                painterResource(id = R.drawable.ic_info),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clickable(onClick = { functionalityNotAvailablePopupShown = true })
+                    .padding(horizontal = 12.dp, vertical = 16.dp)
+                    .height(24.dp),
+                contentDescription = stringResource(id = R.string.info),
             )
         },
     )
