@@ -63,10 +63,13 @@ class StreamingChatRemoteDataSource(
     }
 
     override suspend fun cancelStreaming(taskId: String) {
+        // 取消操作应该静默处理，即使失败也不应该抛出异常
+        // Call.cancel() 通常不会抛出异常，但如果发生异常，我们也应该静默处理
         try {
             sseClient.cancel(taskId)
-        } catch (ignored: Exception) {
-            throw LlmError.CancelledError()
+        } catch (e: Exception) {
+            // 记录日志但不抛出异常，取消操作本身不应该导致错误
+            android.util.Log.d("StreamingChatRemoteDataSource", "Cancel streaming failed for taskId: $taskId", e)
         }
     }
 

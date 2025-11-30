@@ -23,6 +23,7 @@ import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
+import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
@@ -30,6 +31,7 @@ import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.infra.util.toBase64
 import com.example.star.aiwork.ui.ai.UIMessage
 import com.example.star.aiwork.ui.ai.UIMessagePart
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
@@ -52,6 +54,38 @@ class ConversationLogic(
 ) {
 
     private var activeTaskId: String? = null
+
+    /**
+     * 取消当前的流式生成。
+     */
+    suspend fun cancelStreaming() {
+        val taskId = activeTaskId
+        if (taskId != null) {
+            // 无论成功还是失败，都要清除状态
+            pauseStreamingUseCase(taskId).fold(
+                onSuccess = {
+                    activeTaskId = null
+                    withContext(Dispatchers.Main) {
+                        uiState.isGenerating = false
+                    }
+                },
+                onFailure = { error ->
+                    // 取消失败时也清除状态，但不显示错误（取消操作本身不应该报错）
+                    activeTaskId = null
+                    withContext(Dispatchers.Main) {
+                        uiState.isGenerating = false
+                    }
+                    // 记录日志但不显示给用户
+                    android.util.Log.d("ConversationLogic", "Cancel streaming failed: ${error.message}")
+                }
+            )
+        } else {
+            // 如果没有活跃任务，直接清除状态
+            withContext(Dispatchers.Main) {
+                uiState.isGenerating = false
+            }
+        }
+    }
 
     suspend fun processMessage(
         inputContent: String,
@@ -86,6 +120,11 @@ class ConversationLogic(
         // 2. 调用 LLM 获取响应
         if (providerSetting != null && model != null) {
             try {
+                // ✅ 设置生成状态为 true
+                withContext(Dispatchers.Main) {
+                    uiState.isGenerating = true
+                }
+                
                 // RAG Retrieval: 仅对非自动触发的消息尝试检索知识库
                 val knowledgeContext = if (!isAutoTriggered) {
                     retrieveKnowledge(inputContent)
@@ -216,8 +255,10 @@ class ConversationLogic(
                 }
 
                 // 转换为 ChatDataItem
-                val historyChat = messagesToSend.dropLast(1).map { it.toChatDataItem() }
-                val userMessage = messagesToSend.last().toChatDataItem()
+                val historyChat: List<ChatDataItem> = messagesToSend.dropLast(1).map { message ->
+                    toChatDataItem(message)
+                }
+                val userMessage: ChatDataItem = toChatDataItem(messagesToSend.last())
 
                 val sendResult = sendMessageUseCase(
                     sessionId = sessionId,
@@ -237,37 +278,41 @@ class ConversationLogic(
                 var lastUpdateTime = 0L
                 val UPDATE_INTERVAL_MS = 500L
 
-                if (uiState.streamResponse) {
-                    sendResult.stream.collect { delta ->
-                        fullResponse += delta
-                        withContext(Dispatchers.Main) {
-                            // ✅ 第一次收到内容时，移除加载状态
-                            if (delta.isNotEmpty()) {
-                                uiState.updateLastMessageLoadingState(false)
-                            }
+                // ✅ 无论流式还是非流式，都从 stream 收集响应
+                sendResult.stream.collect { delta ->
+                    fullResponse += delta
+                    withContext(Dispatchers.Main) {
+                        // ✅ 第一次收到内容时，移除加载状态
+                        if (delta.isNotEmpty()) {
+                            uiState.updateLastMessageLoadingState(false)
+                        }
+                        // ✅ 流式响应时逐字显示，非流式响应时一次性显示
+                        if (uiState.streamResponse) {
                             uiState.appendToLastMessage(delta)
+                        }
 
-                            val currentTime = System.currentTimeMillis()
-                            if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
-                                persistenceGateway?.replaceLastAssistantMessage(
-                                    sessionId,
-                                    ChatDataItem(
-                                        role = MessageRole.ASSISTANT.name.lowercase(),
-                                        content = fullResponse
-                                    )
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
+                            persistenceGateway?.replaceLastAssistantMessage(
+                                sessionId,
+                                ChatDataItem(
+                                    role = MessageRole.ASSISTANT.name.lowercase(),
+                                    content = fullResponse
                                 )
-                                lastUpdateTime = currentTime
-                            }
+                            )
+                            lastUpdateTime = currentTime
                         }
                     }
                 }
-
-                if (!uiState.streamResponse && fullResponse.isNotBlank()) {
-                    withContext(Dispatchers.Main) {
-                        // ✅ 非流式响应时也要移除加载状态
+                
+                // ✅ 流式响应结束后，如果是非流式模式，一次性显示完整内容
+                withContext(Dispatchers.Main) {
+                    if (!uiState.streamResponse && fullResponse.isNotBlank()) {
                         uiState.updateLastMessageLoadingState(false)
                         uiState.appendToLastMessage(fullResponse)
                     }
+                    // ✅ 响应结束后，设置生成状态为 false
+                    uiState.isGenerating = false
                 }
 
                 // 流式响应结束后，更新最终内容到数据库（标记为完成状态）
@@ -320,8 +365,30 @@ class ConversationLogic(
                     )
 
                     var nextInstruction = ""
-                    plannerResult.stream.collect { delta ->
-                        nextInstruction += delta
+                    try {
+                        plannerResult.stream.collect { delta ->
+                            nextInstruction += delta
+                        }
+                    } catch (e: CancellationException) {
+                        // 协程取消异常，重新抛出
+                        throw e
+                    } catch (e: Exception) {
+                        // 检查是否为取消相关的异常
+                        val isCancelled = e is LlmError.CancelledError || 
+                                e.javaClass.simpleName.contains("CancelledError") ||
+                                e.message?.contains("请求已取消") == true ||
+                                e.message?.contains("Cancelled") == true ||
+                                e.cause is LlmError.CancelledError ||
+                                e.cause is CancellationException
+                        
+                        if (isCancelled) {
+                            // 取消操作，停止 planner
+                            nextInstruction = "STOP"
+                        } else {
+                            // 其他异常，记录但不中断流程
+                            android.util.Log.e("ConversationLogic", "Planner stream error: ${e.message}", e)
+                            nextInstruction = "STOP"
+                        }
                     }
                     nextInstruction = nextInstruction.trim()
 
@@ -339,6 +406,29 @@ class ConversationLogic(
                 }
 
             } catch (e: Exception) {
+                // ✅ 异常时也要设置生成状态为 false
+                withContext(Dispatchers.Main) {
+                    uiState.isGenerating = false
+                }
+                
+                // 检查是否为取消操作导致的异常，如果是则不显示错误
+                val isCancelled = e is LlmError.CancelledError || 
+                        e.javaClass.simpleName.contains("CancelledError") ||
+                        e.message?.contains("请求已取消") == true ||
+                        e.message?.contains("Cancelled") == true ||
+                        e.cause is LlmError.CancelledError
+                
+                if (isCancelled) {
+                    // 取消操作是正常的，不显示错误
+                    withContext(Dispatchers.Main) {
+                        val lastMsg = uiState.messages.firstOrNull()
+                        if (lastMsg?.author == "AI" && (lastMsg.content.isEmpty() || lastMsg.isLoading)) {
+                            uiState.removeFirstMessage()
+                        }
+                    }
+                    return
+                }
+                
                 // 检查是否为 SiliconCloud 兜底失效导致的异常
                 // 异常可能被 LlmError 包装，所以需要检查 message 和 cause
                 // 同时也处理 "请求参数无效" (LlmError.RequestError) 的情况，认为这也可能意味着免费策略失效
@@ -384,7 +474,7 @@ class ConversationLogic(
                         displayName = ""
                     )
 
-                    // 递归重试
+                    // 递归重试（新的 processMessage 调用会重新设置 isGenerating）
                     processMessage(
                         inputContent = inputContent,
                         providerSetting = fallbackSetting,
@@ -397,29 +487,31 @@ class ConversationLogic(
                     return
                 }
 
-                // ✅ 其他错误也移除加载状态
+                // ✅ 其他错误也移除加载状态，但不显示错误消息
                 withContext(Dispatchers.Main) {
                     val lastMsg = uiState.messages.firstOrNull()
                     if (lastMsg?.author == "AI" && (lastMsg.content.isEmpty() || lastMsg.isLoading)) {
                         uiState.removeFirstMessage()
                     }
-
-                    uiState.addMessage(
-                        Message("System", "Error: ${e.message}", timeNow)
-                    )
+                    // 不显示错误消息，只记录日志
                 }
-                e.printStackTrace()
+                // 记录错误日志但不显示给用户
+                android.util.Log.e("ConversationLogic", "Error processing message: ${e.message}", e)
             }
         } else {
-            uiState.addMessage(
-                Message("System", "No AI Provider configured.", timeNow)
-            )
+            // ✅ 如果没有 provider 或 model，设置生成状态为 false
+            withContext(Dispatchers.Main) {
+                uiState.isGenerating = false
+                uiState.addMessage(
+                    Message("System", "No AI Provider configured.", timeNow)
+                )
+            }
         }
     }
 
-    private fun UIMessage.toChatDataItem(): ChatDataItem {
+    private fun toChatDataItem(message: UIMessage): ChatDataItem {
         val builder = StringBuilder()
-        parts.forEach { part ->
+        message.parts.forEach { part ->
             when (part) {
                 is UIMessagePart.Text -> builder.append(part.text)
                 is UIMessagePart.Image -> builder.append("\n[image:${part.url}]")
@@ -427,7 +519,7 @@ class ConversationLogic(
             }
         }
         return ChatDataItem(
-            role = this.role.name.lowercase(),
+            role = message.role.name.lowercase(),
             content = builder.toString()
         )
     }

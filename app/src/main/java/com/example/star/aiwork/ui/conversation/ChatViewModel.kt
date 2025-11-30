@@ -27,6 +27,7 @@ import com.example.star.aiwork.domain.usecase.session.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
+import kotlinx.coroutines.flow.SharingStarted
 
 class ChatViewModel(
     private val getSessionListUseCase: GetSessionListUseCase,
@@ -48,8 +49,20 @@ class ChatViewModel(
     private val _currentSession = MutableStateFlow<SessionEntity?>(null)
     val currentSession: StateFlow<SessionEntity?> = _currentSession.asStateFlow()
 
-    private val _messages = MutableStateFlow<List<MessageEntity>>(emptyList())
-    val messages: StateFlow<List<MessageEntity>> = _messages.asStateFlow()
+    // 使用 flatMapLatest 自动根据 currentSession 切换消息流
+    val messages: StateFlow<List<MessageEntity>> = _currentSession
+        .flatMapLatest { session ->
+            if (session != null) {
+                observeMessagesUseCase(session.id)
+            } else {
+                flowOf(emptyList())
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     private val _draft = MutableStateFlow<String?>(null)
     val draft: StateFlow<String?> = _draft.asStateFlow()
@@ -82,6 +95,8 @@ class ChatViewModel(
             )
             createSessionUseCase(session)
             _currentSession.value = session
+            // messages 会自动通过 flatMapLatest 加载，无需手动调用
+            loadDraft()
         }
     }
 
@@ -111,7 +126,7 @@ class ChatViewModel(
             val session = _currentSession.value ?: return@launch
             deleteSessionUseCase(session.id)
             _currentSession.value = null
-            _messages.value = emptyList()
+            // messages 会自动清空（通过 flatMapLatest 返回 emptyList）
             _draft.value = null
         }
     }
@@ -123,7 +138,7 @@ class ChatViewModel(
             val currentSession = _currentSession.value
             if (currentSession?.id == sessionId) {
                 _currentSession.value = null
-                _messages.value = emptyList()
+                // messages 会自动清空（通过 flatMapLatest 返回 emptyList）
                 _draft.value = null
             }
             // 刷新会话列表
@@ -180,17 +195,16 @@ class ChatViewModel(
     fun rollbackLastMessage() {
         val session = _currentSession.value ?: return
         viewModelScope.launch {
-            val lastMessage = _messages.value.lastOrNull() ?: return@launch
+            val lastMessage = messages.value.lastOrNull() ?: return@launch
             rollbackMessageUseCase(lastMessage.id)
         }
     }
 
+    // loadMessages 方法已不再需要，因为 messages 通过 flatMapLatest 自动加载
+    // 保留此方法以保持向后兼容，但实际不会执行任何操作
+    @Deprecated("Messages are now automatically loaded via flatMapLatest", ReplaceWith(""))
     fun loadMessages(sessionId: String) {
-        viewModelScope.launch {
-            observeMessagesUseCase(sessionId).collect { list ->
-                _messages.value = list
-            }
-        }
+        // 消息现在通过 flatMapLatest 自动加载，无需手动调用
     }
 
     fun saveDraft(content: String) {
@@ -211,7 +225,7 @@ class ChatViewModel(
 
     fun selectSession(session: SessionEntity) {
         _currentSession.value = session
-        loadMessages(session.id)
+        // messages 会自动通过 flatMapLatest 加载，无需手动调用 loadMessages
         loadDraft()
     }
 

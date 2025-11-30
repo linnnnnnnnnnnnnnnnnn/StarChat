@@ -1,5 +1,6 @@
 package com.example.star.aiwork.infra.network
 
+import android.util.Log
 import com.example.star.aiwork.infra.util.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -72,7 +73,13 @@ class SseClient(
      * 取消指定任务。
      */
     fun cancel(taskId: String) {
-        activeCalls.remove(taskId)?.cancel()
+        try {
+            activeCalls.remove(taskId)?.cancel()
+        } catch (e: Exception) {
+            // 取消操作应该静默处理，即使失败也不应该抛出异常
+            // Call.cancel() 通常不会抛出异常，但在某些边缘情况下可能会
+            Log.d("SseClient", "Cancel call failed for taskId: $taskId", e)
+        }
     }
 
     /**

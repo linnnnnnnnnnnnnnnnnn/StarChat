@@ -407,6 +407,8 @@ fun ConversationContent(
                 selectedImageUri = uiState.selectedImageUri,
                 onImageSelected = { uri -> uiState.selectedImageUri = uri },
                 onMessageSent = { content ->
+                    // ✅ 立即设置生成状态为 true，以便图标快速切换
+                    uiState.isGenerating = true
                     scope.launch {
                         conversationLogic.processMessage(
                             inputContent = content,
@@ -463,6 +465,12 @@ fun ConversationContent(
                     }
                 },
                 isRecording = uiState.isRecording,
+                isGenerating = uiState.isGenerating,
+                onPauseStream = {
+                    scope.launch {
+                        conversationLogic.cancelStreaming()
+                    }
+                },
                 textFieldValue = uiState.textFieldValue,
                 onTextChanged = { uiState.textFieldValue = it }
             )

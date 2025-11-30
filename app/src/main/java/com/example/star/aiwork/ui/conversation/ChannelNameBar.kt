@@ -63,20 +63,10 @@ fun ChannelNameBar(
         scrollBehavior = scrollBehavior,
         onNavIconPressed = onNavIconPressed,
         title = {
-            // ✅ 使用你的双行布局
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // 频道名称
-                Text(
-                    text = channelName,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                // 成员数量
-                Text(
-                    text = stringResource(R.string.members, channelMembers),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                text = channelName,
+                style = MaterialTheme.typography.titleMedium
+            )
         },
         actions = {
             // 设置图标
@@ -98,6 +88,7 @@ fun ChannelNameBar(
                 contentDescription = stringResource(id = R.string.search),
             )
             // ✅ 添加信息图标
+            /*
             Icon(
                 painterResource(id = R.drawable.ic_info),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -106,7 +97,7 @@ fun ChannelNameBar(
                     .padding(horizontal = 12.dp, vertical = 16.dp)
                     .height(24.dp),
                 contentDescription = stringResource(id = R.string.info),
-            )
+            )*/
         },
     )
 }

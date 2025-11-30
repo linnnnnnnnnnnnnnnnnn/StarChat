@@ -52,6 +52,7 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertEmoticon
 import androidx.compose.material.icons.filled.InsertPhoto
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -144,6 +145,8 @@ fun UserInputPreview() {
  * @param onStartRecording 开始录音回调。
  * @param onStopRecording 停止录音回调。
  * @param isRecording 是否正在录音。
+ * @param isGenerating 是否正在生成回答。
+ * @param onPauseStream 暂停流式生成回调。
  * @param textFieldValue 当前文本框的值（Hoisted State）。
  * @param onTextChanged 文本变更回调。
  * @param selectedImageUri 当前选中的图片 URI。
@@ -158,6 +161,8 @@ fun UserInput(
     onStartRecording: () -> Unit = {},
     onStopRecording: () -> Unit = {},
     isRecording: Boolean = false,
+    isGenerating: Boolean = false,  // 新增：是否正在生成回答
+    onPauseStream: () -> Unit = {},  // 新增：暂停流式生成回调
     isTranscribing: Boolean = false,  // 新增
     pendingTranscription: String = "",  // 新增
     textFieldValue: TextFieldValue = TextFieldValue(),
@@ -234,6 +239,8 @@ fun UserInput(
             pendingTranscription = pendingTranscription,  // 新增
             onStartRecording = onStartRecording,
             onStopRecording = onStopRecording,
+            isGenerating = isGenerating,
+            onPauseStream = onPauseStream,
             onMessageSent = {
                 onMessageSent(textFieldValue.text)
                 // 清空输入框
@@ -370,6 +377,8 @@ private fun UserInputText(
     isRecording: Boolean,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
+    isGenerating: Boolean,  // 新增：是否正在生成回答
+    onPauseStream: () -> Unit,  // 新增：暂停流式生成回调
     onMessageSent: () -> Unit,
     onEmojiClicked: () -> Unit,
     isTranscribing: Boolean,  // 新增
@@ -478,64 +487,81 @@ private fun UserInputText(
             }
         }
 
-        // 语音/发送按钮切换 - 在输入框外部右侧，固定位置
-        // 语音/发送按钮 - 固定在外部右侧
+        // 语音/发送/暂停按钮切换 - 在输入框外部右侧，固定位置
         Box(
             modifier = Modifier
                 .padding(end = 16.dp, bottom = 8.dp)  // ✅ padding 在最外层
                 .size(48.dp)  // ✅ 固定大小 48dp
                 .background(
-                    color = if (textFieldValue.text.isNotEmpty()) {
-                        MaterialTheme.colorScheme.primary  // 有文字：蓝色
-                    } else if (isRecording) {
-                        MaterialTheme.colorScheme.error  // 录音中：红色
-                    } else {
-                        MaterialTheme.colorScheme.primary  // 默认：蓝色
+                    color = when {
+                        isGenerating -> MaterialTheme.colorScheme.error  // 生成中：红色（暂停）
+                        textFieldValue.text.isNotEmpty() -> MaterialTheme.colorScheme.primary  // 有文字：蓝色
+                        isRecording -> MaterialTheme.colorScheme.error  // 录音中：红色
+                        else -> MaterialTheme.colorScheme.primary  // 默认：蓝色
                     },
                     shape = RoundedCornerShape(10.dp)  // ✅ 圆角 10dp（不要太大）
                 )
                 .then(
-                    if (textFieldValue.text.isNotEmpty()) {
-                        // 有文字时：普通点击
-                        Modifier.clickable(
-                            onClick = onMessageSent,
-                            enabled = textFieldValue.text.isNotBlank()
-                        )
-                    } else {
-                        // 无文字时：按住录音
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    try {
-                                        onStartRecording()
-                                        awaitRelease()
-                                    } finally {
-                                        onStopRecording()
-                                    }
-                                }
+                    when {
+                        isGenerating -> {
+                            // 生成中：点击暂停
+                            Modifier.clickable(onClick = onPauseStream)
+                        }
+                        textFieldValue.text.isNotEmpty() -> {
+                            // 有文字时：普通点击发送
+                            Modifier.clickable(
+                                onClick = onMessageSent,
+                                enabled = textFieldValue.text.isNotBlank()
                             )
+                        }
+                        else -> {
+                            // 无文字时：按住录音
+                            Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        try {
+                                            onStartRecording()
+                                            awaitRelease()
+                                        } finally {
+                                            onStopRecording()
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 ),
             contentAlignment = Alignment.Center
         ) {
             // 图标切换
-            if (textFieldValue.text.isNotEmpty()) {
-                // 发送图标
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.Send,
-                    contentDescription = stringResource(R.string.send),
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)  // ✅ 图标 22dp
-                )
-            } else {
-                // 麦克风图标
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_mic),
-                    contentDescription = stringResource(R.string.record_audio),
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)  // ✅ 图标统一 22dp
-                )
+            when {
+                isGenerating -> {
+                    // 暂停图标（方形）
+                    Icon(
+                        imageVector = Icons.Filled.Stop,
+                        contentDescription = "Pause stream",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)  // ✅ 图标 22dp
+                    )
+                }
+                textFieldValue.text.isNotEmpty() -> {
+                    // 发送图标
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.Send,
+                        contentDescription = stringResource(R.string.send),
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)  // ✅ 图标 22dp
+                    )
+                }
+                else -> {
+                    // 麦克风图标
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_mic),
+                        contentDescription = stringResource(R.string.record_audio),
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)  // ✅ 图标统一 22dp
+                    )
+                }
             }
         }
     }

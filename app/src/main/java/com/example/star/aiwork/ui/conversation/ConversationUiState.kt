@@ -66,6 +66,9 @@ class ConversationUiState(
     var isTranscribing: Boolean by mutableStateOf(false) // 新增：是否正在转换文字
     var pendingTranscription: String by mutableStateOf("") // 新增：暂存转写文本（录音时实时显示）
 
+    // AI 生成状态
+    var isGenerating: Boolean by mutableStateOf(false) // 新增：是否正在生成回答
+
     // 输入框文本状态
     var textFieldValue: TextFieldValue by mutableStateOf(TextFieldValue())
 
