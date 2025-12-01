@@ -330,19 +330,9 @@ class ConversationLogic(
                         uiState.updateLastMessageLoadingState(false)
                         uiState.isGenerating = false
                         
-                        // ✅ 如果已经收到部分内容，保留它并添加提示
+                        // ✅ 如果已经收到部分内容，保留它
                         if (fullResponse.isNotEmpty()) {
-                            // 在已收到的内容后添加中断提示
-                            val errorHint = when {
-                                streamError is com.example.star.aiwork.data.model.LlmError.NetworkError -> 
-                                    "\n\n[网络连接中断，请检查网络]"
-                                streamError.cause is java.net.SocketException ||
-                                streamError.cause is java.io.EOFException ||
-                                streamError.cause is javax.net.ssl.SSLException -> 
-                                    "\n\n[网络连接中断， 请检查网络]"
-                                else -> "\n\n[响应中断]"
-                            }
-                            uiState.appendToLastMessage(errorHint)
+                            // 直接保留已收到的内容，不添加中断提示
                         } else {
                             // ✅ 如果完全没有收到内容，移除空消息
                             if (uiState.messages.isNotEmpty() && 
@@ -454,24 +444,8 @@ class ConversationLogic(
                         uiState.removeFirstMessage()
                     }
                     
-                    // ✅ 生成更友好的错误消息
-                    val errorMessage = when {
-                        // data/remote 层会把超时也映射成 NetworkError("请求超时")
-                        e is com.example.star.aiwork.data.model.LlmError.NetworkError -> {
-                            // 如果 message 里带有“超时”字样，则提示为请求超时
-                            if (e.message?.contains("超时") == true ||
-                                e.message?.contains("timeout", ignoreCase = true) == true
-                            ) {
-                                "请求超时：${e.message ?: "服务器响应超时"}"
-                            } else {
-                                "网络连接失败：${e.message ?: "无法连接到服务器"}"
-                            }
-                        }
-                        e.message?.contains("网络", ignoreCase = true) == true ||
-                        e.message?.contains("connection", ignoreCase = true) == true -> 
-                            "网络错误：${e.message}"
-                        else -> "错误：${e.message ?: "未知错误"}"
-                    }
+                    // ✅ 生成格式化的错误消息，包含错误类型和建议
+                    val errorMessage = formatErrorMessage(e)
                     
                     uiState.addMessage(
                         Message("System", errorMessage, timeNow)
@@ -505,6 +479,60 @@ class ConversationLogic(
         )
     }
     
+    /**
+     * 格式化错误消息，包含错误类型和解决建议
+     */
+    private fun formatErrorMessage(error: Exception): String {
+        return when (error) {
+            is com.example.star.aiwork.data.model.LlmError.NetworkError -> {
+                formatNetworkError(error)
+            }
+            is com.example.star.aiwork.data.model.LlmError.AuthenticationError -> {
+                "身份验证失败：${error.message ?: "API密钥无效或已过期"}\n\n请检查并更新您的API密钥"
+            }
+            is com.example.star.aiwork.data.model.LlmError.RateLimitError -> {
+                "请求频率过高：${error.message ?: "已达到API使用限制"}\n\n请稍后再试，或升级您的API套餐"
+            }
+            is com.example.star.aiwork.data.model.LlmError.ServerError -> {
+                "服务器错误：${error.message ?: "AI服务暂时不可用"}\n\n请稍后重试，或联系技术支持"
+            }
+            is com.example.star.aiwork.data.model.LlmError.RequestError -> {
+                "请求参数错误：${error.message ?: "请求格式或参数有误"}\n\n请检查输入内容，或联系技术支持"
+            }
+            is com.example.star.aiwork.data.model.LlmError.UnknownError -> {
+                "未知错误：${error.message ?: "发生了意外错误"}\n\n请重试操作，如问题持续请联系技术支持"
+            }
+            else -> {
+                // 处理其他类型的异常
+                if (error.message?.contains("网络", ignoreCase = true) == true ||
+                    error.message?.contains("connection", ignoreCase = true) == true) {
+                    "网络错误：${error.message}\n\n请检查网络连接后重试"
+                } else {
+                    "系统错误：${error.message ?: "未知错误"}\n\n请重试操作，如问题持续请联系技术支持"
+                }
+            }
+        }
+    }
+
+    /**
+     * 格式化网络错误信息
+     */
+    private fun formatNetworkError(error: com.example.star.aiwork.data.model.LlmError.NetworkError): String {
+        val message = error.message ?: "网络连接失败"
+
+        return when {
+            message.contains("超时") || message.contains("timeout", ignoreCase = true) -> {
+                "网络超时：$message\n\n请检查网络连接速度，或稍后重试"
+            }
+            message.contains("连接") || message.contains("connection", ignoreCase = true) -> {
+                "网络错误：$message\n\n请检查网络连接状态，或尝试切换网络"
+            }
+            else -> {
+                "网络错误：$message\n\n请检查网络连接后重试"
+            }
+        }
+    }
+
     /**
      * 检查异常是否是取消操作相关的。
      * 现在只有真正的 CancellationException 才是取消，其他 NetworkException 都是网络错误。
