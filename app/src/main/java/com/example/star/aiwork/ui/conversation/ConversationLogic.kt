@@ -446,10 +446,14 @@ class ConversationLogic(
                     
                     // ✅ 生成格式化的错误消息，包含错误类型和建议
                     val errorMessage = formatErrorMessage(e)
-                    
+
                     uiState.addMessage(
                         Message("System", errorMessage, timeNow)
                     )
+
+                    uiState.isGenerating = false
+                    // 确保 AI 消息容器不是加载状态
+                    uiState.updateLastMessageLoadingState(false)
                 }
                 e.printStackTrace()
             }
