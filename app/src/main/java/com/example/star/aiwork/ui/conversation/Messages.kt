@@ -120,11 +120,11 @@ fun Messages(
                 // 为了简单起见，硬编码日期分隔线
                 if (index == messages.size - 1) {
                     item {
-                        DayHeader("20 Aug")
+                        //DayHeader("20 Aug")
                     }
                 } else if (index == 2) {
                     item {
-                        DayHeader("Today")
+                        //DayHeader("Today")
                     }
                 }
 
@@ -312,10 +312,12 @@ fun ChatItemBubble(
     isUserMe: Boolean,
     authorClicked: (String) -> Unit
 ) {
-    val backgroundBubbleColor = if (isUserMe) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    val isSystemMessage = message.author == "System"
+
+    val backgroundBubbleColor = when {
+        isSystemMessage -> MaterialTheme.colorScheme.errorContainer // 淡红色背景
+        isUserMe -> MaterialTheme.colorScheme.primaryContainer // 淡蓝色背景
+        else -> MaterialTheme.colorScheme.surfaceContainer // 淡灰色背景
     }
 
     val clipboardManager = LocalClipboardManager.current
@@ -340,7 +342,9 @@ fun ChatItemBubble(
                 }
 
                 // 智能复制按钮 - 仅AI消息且为纯文本显示
-                if (!isUserMe && isPureTextContent(message.content) && message.content.isNotEmpty()) {
+                // 错误信息气泡不展示复制按键
+                if (!isUserMe && message.author != "System" && isPureTextContent(message.content) && message.content.isNotEmpty()) {
+                //if (!isUserMe && isPureTextContent(message.content) && message.content.isNotEmpty()) {
                     IconButton(
                         onClick = {
                             clipboardManager.setText(AnnotatedString(message.content))
