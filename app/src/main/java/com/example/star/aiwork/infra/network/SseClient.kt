@@ -2,6 +2,7 @@ package com.example.star.aiwork.infra.network
 
 import android.util.Log
 import com.example.star.aiwork.infra.util.await
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -63,7 +64,14 @@ class SseClient(
                 }
             }
         } catch (io: IOException) {
+            // 检查是否是取消操作导致的异常
+            if (isCancellationException(io)) {
+                throw CancellationException("SSE stream was cancelled", io)
+            }
             throw mapIOException(io)
+        } catch (ce: CancellationException) {
+            // 重新抛出取消异常，不转换为NetworkException
+            throw ce
         } finally {
             activeCalls.remove(taskId)
         }
@@ -101,6 +109,49 @@ class SseClient(
             this
         }
     }
+}
+
+/**
+ * 检查异常是否是取消操作导致的。
+ * 当用户取消请求时，OkHttp会抛出StreamResetException，错误码为CANCEL。
+ * 由于StreamResetException是OkHttp的内部API，我们通过类名和消息来检测。
+ */
+private fun isCancellationException(e: Throwable): Boolean {
+    var cause: Throwable? = e
+    while (cause != null) {
+        val className = cause.javaClass.name
+        val message = cause.message?.lowercase() ?: ""
+        
+        // 检查是否是StreamResetException（OkHttp内部类）
+        if (className.contains("StreamResetException", ignoreCase = true)) {
+            // 检查异常消息是否包含"cancel"
+            if (message.contains("cancel", ignoreCase = true) || 
+                message.contains("stream was reset: cancel", ignoreCase = true)) {
+                return true
+            }
+            // 尝试通过反射检查errorCode
+            try {
+                val errorCodeField = cause.javaClass.getDeclaredField("errorCode")
+                errorCodeField.isAccessible = true
+                val errorCode = errorCodeField.getInt(cause)
+                // HTTP/2 CANCEL error code is 0x8
+                if (errorCode == 0x8) {
+                    return true
+                }
+            } catch (ex: Exception) {
+                // 如果反射失败，继续使用消息检查
+            }
+        }
+        
+        // 也检查异常消息中是否包含取消相关的关键词
+        if (message.contains("stream was reset: cancel", ignoreCase = true) ||
+            (message.contains("stream was reset") && message.contains("cancel", ignoreCase = true))) {
+            return true
+        }
+        
+        cause = cause.cause
+    }
+    return false
 }
 
 private fun mapIOException(e: IOException): NetworkException {

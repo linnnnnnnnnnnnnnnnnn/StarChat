@@ -388,13 +388,14 @@ class ConversationLogic(
                 }
 
             } catch (e: Exception) {
-                if (e is CancellationException) {
+                // 检查是否是取消操作（包括CancellationException和包含取消原因的NetworkException）
+                if (e is CancellationException || isCancellationRelatedException(e)) {
                     // 流被取消是正常操作，不需要显示错误
                     withContext(Dispatchers.Main) {
                         uiState.isGenerating = false
                         // 确保 AI 消息容器不是加载状态
                         uiState.updateLastMessageLoadingState(false)
-                        // 可以选择添加一条“已取消”的提示，或者直接保持原样
+                        // 可以选择添加一条"已取消"的提示，或者直接保持原样
                         if (uiState.messages.last().content.isBlank()) {
                             uiState.appendToLastMessage("[Cancelled]")
                         }
@@ -433,5 +434,30 @@ class ConversationLogic(
             role = message.role.name.lowercase(),
             content = builder.toString()
         )
+    }
+    
+    /**
+     * 检查异常是否是取消操作相关的。
+     * 包括CancellationException和包含StreamResetException的NetworkException。
+     */
+    private fun isCancellationRelatedException(e: Exception): Boolean {
+        // 检查是否是NetworkException且包含取消原因
+        if (e is com.example.star.aiwork.infra.network.NetworkException) {
+            var cause: Throwable? = e.cause
+            while (cause != null) {
+                val message = cause.message?.lowercase() ?: ""
+                if (message.contains("cancel", ignoreCase = true) ||
+                    message.contains("stream was reset: cancel", ignoreCase = true) ||
+                    message.contains("stream was reset", ignoreCase = true)) {
+                    return true
+                }
+                // 检查是否是StreamResetException
+                if (cause.javaClass.simpleName == "StreamResetException") {
+                    return true
+                }
+                cause = cause.cause
+            }
+        }
+        return false
     }
 }

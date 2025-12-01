@@ -13,6 +13,7 @@ import com.example.star.aiwork.infra.network.NetworkException
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import com.example.star.aiwork.infra.util.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.filter
@@ -59,7 +60,13 @@ class StreamingChatRemoteDataSource(
         return sseClient.createStream(request, openAiConfig.taskId, client)
             .filter { it.isNotBlank() && it != DONE_TOKEN }
             .mapNotNull { payload -> parseChunk(payload) }
-            .catch { throwable -> throw throwable.toLlmError() }
+            .catch { throwable ->
+                // 取消异常不应该转换为LlmError，应该重新抛出以便上层正确处理
+                if (throwable is CancellationException) {
+                    throw throwable
+                }
+                throw throwable.toLlmError()
+            }
     }
 
     override suspend fun cancelStreaming(taskId: String) {
