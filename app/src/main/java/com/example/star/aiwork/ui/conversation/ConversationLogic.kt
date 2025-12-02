@@ -109,7 +109,7 @@ class ConversationLogic(
             onPersistNewChatSession(sessionId)
         }
         // ADDED: Auto-rename session logic
-        if (!isAutoTriggered && uiState.channelName == "New Chat" && uiState.messages.none { it.author == authorMe }) {
+        if (!isAutoTriggered && (uiState.channelName == "New Chat" || uiState.channelName == "新聊天") && uiState.messages.none { it.author == authorMe }) {
             val newTitle = inputContent.take(20).trim()
             if (newTitle.isNotBlank()) {
                 onRenameSession(sessionId, newTitle)
