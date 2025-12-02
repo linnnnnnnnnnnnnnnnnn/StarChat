@@ -58,7 +58,8 @@ class ConversationLogic(
     private val persistenceGateway: MessagePersistenceGateway? = null,
     private val onRenameSession: (sessionId: String, newName: String) -> Unit, // ADDED
     private val onPersistNewChatSession: suspend (sessionId: String) -> Unit = { }, // ADDED: 持久化新会话的回调
-    private val isNewChat: (sessionId: String) -> Boolean = { false } // ADDED: 检查是否为新会话
+    private val isNewChat: (sessionId: String) -> Boolean = { false }, // ADDED: 检查是否为新会话
+    private val onSessionUpdated: suspend (sessionId: String) -> Unit = { } // ADDED: 会话更新后的回调，用于刷新会话列表
 ) {
 
     private var activeTaskId: String? = null
@@ -375,6 +376,8 @@ class ConversationLogic(
                             content = fullResponse
                         )
                     )
+                    // 通知会话已更新，刷新会话列表（让 drawer 中的会话按 updatedAt 排序）
+                    onSessionUpdated(sessionId)
                 }
 
                 // --- Auto-Loop Logic with Planner ---
