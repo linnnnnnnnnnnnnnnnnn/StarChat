@@ -86,7 +86,7 @@ fun ProfileScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Model & Key Settings") },
+                title = { Text("模型 & 密钥 设置") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -134,7 +134,7 @@ fun AddProviderDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Provider Type") },
+        title = { Text("选择提供商类型") },
         text = {
             Column {
                 ListItem(

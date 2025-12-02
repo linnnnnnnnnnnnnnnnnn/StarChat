@@ -141,7 +141,7 @@ fun ModelSettingsDialog(
 
                 // Auto-Loop 开关
                 Text(
-                    text = "Agent Auto-Loop",
+                    text = "自动连续追问",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -151,7 +151,7 @@ fun ModelSettingsDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Enable Auto-follow up",
+                        text = "开启自动连续追问",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
