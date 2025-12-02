@@ -335,6 +335,11 @@ fun ConversationContent(
                 navigateToProfile = navigateToProfile,
                 modifier = Modifier.weight(1f),
                 scrollState = scrollState,
+                logic = conversationLogic,
+                providerSetting = providerSetting,
+                model = model,
+                retrieveKnowledge = retrieveKnowledge,
+                scope = scope
             )
 
             // 用户输入区域//f2

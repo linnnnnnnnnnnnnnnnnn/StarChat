@@ -108,9 +108,10 @@ class ChatViewModel(
         viewModelScope.launch {
             getSessionListUseCase().collect { list ->
                 _sessions.value = list
-                if (_currentSession.value == null) {
-                    _currentSession.value = list.firstOrNull()
-                }
+                // 不再自动选择第一个会话，始终显示空对话页面
+                // if (_currentSession.value == null) {
+                //     _currentSession.value = list.firstOrNull()
+                // }
             }
         }
     }

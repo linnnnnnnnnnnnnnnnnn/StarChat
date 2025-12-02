@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,6 +86,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import com.example.star.aiwork.domain.model.Model
+import com.example.star.aiwork.domain.model.ProviderSetting
+import kotlinx.coroutines.CoroutineScope
 
 const val ConversationTestTag = "ConversationTestTag"
 
@@ -97,12 +101,28 @@ fun Messages(
     messages: List<Message>,
     navigateToProfile: (String) -> Unit,
     scrollState: LazyListState,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    logic: ConversationLogic? = null,
+    providerSetting: ProviderSetting? = null,
+    model: Model? = null,
+    retrieveKnowledge: suspend (String) -> String = { "" },
+    scope: CoroutineScope? = null
 ) {
-    val scope = rememberCoroutineScope()
+    val coroutineScope = scope ?: rememberCoroutineScope()
     Box(modifier = modifier) {
 
         val authorMe = stringResource(id = R.string.author_me)
+        
+        // 找到最后一条助手消息（在 reverseLayout 中，第一条消息是最后一条）
+        val lastAssistantMessageIndex = messages.indexOfFirst { 
+            it.author != authorMe && it.author != "System" 
+        }
+        val showRegenerateButton = lastAssistantMessageIndex >= 0 && 
+                                   logic != null && 
+                                   providerSetting != null && 
+                                   model != null &&
+                                   !messages[lastAssistantMessageIndex].isLoading
+        
         LazyColumn(
             reverseLayout = true,
             state = scrollState,
@@ -116,6 +136,7 @@ fun Messages(
                 val content = messages[index]
                 val isFirstMessageByAuthor = prevAuthor != content.author
                 val isLastMessageByAuthor = nextAuthor != content.author
+                val isLastAssistantMessage = index == lastAssistantMessageIndex
 
                 // 为了简单起见，硬编码日期分隔线
                 if (index == messages.size - 1) {
@@ -135,6 +156,17 @@ fun Messages(
                         isUserMe = content.author == authorMe,
                         isFirstMessageByAuthor = isFirstMessageByAuthor,
                         isLastMessageByAuthor = isLastMessageByAuthor,
+                        isLastAssistantMessage = isLastAssistantMessage,
+                        showRegenerateButton = showRegenerateButton && isLastAssistantMessage,
+                        onRegenerateClick = {
+                            coroutineScope.launch {
+                                logic?.rollbackAndRegenerate(
+                                    providerSetting = providerSetting,
+                                    model = model,
+                                    retrieveKnowledge = retrieveKnowledge
+                                )
+                            }
+                        }
                     )
                 }
             }
@@ -174,6 +206,9 @@ fun Message(
     isUserMe: Boolean,
     isFirstMessageByAuthor: Boolean,
     isLastMessageByAuthor: Boolean,
+    isLastAssistantMessage: Boolean = false,
+    showRegenerateButton: Boolean = false,
+    onRegenerateClick: () -> Unit = {}
 ) {
     val borderColor = if (isUserMe) {
         MaterialTheme.colorScheme.primary
@@ -215,6 +250,9 @@ fun Message(
             isFirstMessageByAuthor = isFirstMessageByAuthor,
             isLastMessageByAuthor = isLastMessageByAuthor,
             authorClicked = onAuthorClick,
+            isLastAssistantMessage = isLastAssistantMessage,
+            showRegenerateButton = showRegenerateButton,
+            onRegenerateClick = onRegenerateClick,
             modifier = Modifier
                 .padding(end = if (isUserMe) 16.dp else 16.dp)
                 .widthIn(max = 300.dp)
@@ -233,12 +271,39 @@ fun AuthorAndTextMessage(
     isLastMessageByAuthor: Boolean,
     authorClicked: (String) -> Unit,
     modifier: Modifier = Modifier,
+    isLastAssistantMessage: Boolean = false,
+    showRegenerateButton: Boolean = false,
+    onRegenerateClick: () -> Unit = {}
 ) {
     Column(modifier = modifier) {
         if (isLastMessageByAuthor && !isUserMe) {
             AuthorNameTimestamp(msg)
         }
         ChatItemBubble(msg, isUserMe, authorClicked = authorClicked)
+        
+        // 在最后一条助手消息下方显示重新生成图标
+        if (isLastAssistantMessage && showRegenerateButton && !isUserMe) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                IconButton(
+                    onClick = onRegenerateClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "重新生成",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        
         if (isFirstMessageByAuthor) {
             Spacer(modifier = Modifier.height(8.dp))
         } else {

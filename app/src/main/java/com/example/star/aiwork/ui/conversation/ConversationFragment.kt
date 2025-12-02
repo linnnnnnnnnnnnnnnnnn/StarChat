@@ -85,7 +85,7 @@ class ConversationFragment : Fragment() {
                     currentSession?.let { session ->
                         chatViewModel.getOrCreateSessionUiState(session.id, session.name)
                     } ?: ConversationUiState(
-                        channelName = "#composers",
+                        channelName = "新对话",
                         channelMembers = 1,
                         initialMessages = emptyList()
                     )
@@ -136,7 +136,16 @@ class ConversationFragment : Fragment() {
                             chatViewModel.renameSession(sessionId, newName)
                         },
                         onPersistNewChatSession = { sessionId ->
-                            chatViewModel.persistNewChatSession(sessionId)
+                            scope.launch {
+                                // 如果当前没有会话，先创建临时会话
+                                if (currentSession == null) {
+                                    // 创建临时会话，使用传入的 sessionId
+                                    // 注意：这里我们需要创建一个临时会话并标记为新会话
+                                    val sessionName = "新聊天"
+                                    chatViewModel.createTemporarySession(sessionName)
+                                }
+                                chatViewModel.persistNewChatSession(sessionId)
+                            }
                         },
                         isNewChat = { sessionId ->
                             chatViewModel.isNewChat(sessionId)
