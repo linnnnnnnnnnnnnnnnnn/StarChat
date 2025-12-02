@@ -79,6 +79,7 @@ class ConversationFragment : Fragment() {
                 val sessions by chatViewModel.sessions.collectAsStateWithLifecycle()
                 val messagesFromDb by chatViewModel.messages.collectAsStateWithLifecycle()
                 val searchQuery by chatViewModel.searchQuery.collectAsStateWithLifecycle()
+                val searchResults by chatViewModel.searchResults.collectAsStateWithLifecycle()
 
                 // 获取或创建当前会话的 UI 状态
                 val uiState = remember(currentSession?.id) {
@@ -219,7 +220,7 @@ class ConversationFragment : Fragment() {
                         currentSessionId = currentSession?.id,
                         searchQuery = searchQuery,
                         onSearchQueryChanged = { query -> chatViewModel.searchSessions(query) },
-                        searchResults = sessions,
+                        searchResults = searchResults,
                         onSessionSelected = { session -> chatViewModel.selectSession(session) }
                     )
                 }
