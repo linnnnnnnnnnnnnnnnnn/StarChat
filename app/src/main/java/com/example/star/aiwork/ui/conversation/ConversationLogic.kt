@@ -73,6 +73,8 @@ class ConversationLogic(
     private var activeTaskId: String? = null
     // 用于保存流式收集协程的 Job，以便可以立即取消
     private var streamingJob: Job? = null
+    // 用于保存提示消息流式显示的 Job，以便可以立即取消
+    private var hintTypingJob: Job? = null
     // 创建独立的协程作用域用于流式收集，以便可以独立取消
     private val streamingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     // 标记是否已被取消，用于非流式模式下避免显示已收集的内容
@@ -82,10 +84,12 @@ class ConversationLogic(
      * 取消当前的流式生成。
      */
     suspend fun cancelStreaming() {
-        // 立即取消流式收集协程
+        // 立即取消流式收集协程和提示消息的流式显示协程
         isCancelled = true
         streamingJob?.cancel()
         streamingJob = null
+        hintTypingJob?.cancel() // 取消提示消息的流式显示
+        hintTypingJob = null
         
         // 根据流式模式决定处理方式
         val currentContent: String
@@ -415,7 +419,6 @@ class ConversationLogic(
                 var lastUpdateTime = 0L
                 val UPDATE_INTERVAL_MS = 500L
                 var hasShownSlowLoadingHint = false // 标记是否已显示慢加载提示
-                var hintTypingJob: Job? = null // 提示消息的流式显示协程
 
                 // 无论流式还是非流式，都从 stream 收集响应
                 // 在独立的协程中运行流式收集，以便可以立即取消
@@ -431,23 +434,32 @@ class ConversationLogic(
                                     uiState.updateLastMessageLoadingState(false)
                                 }
 
-                                // 非流式模式下，第一次收到数据时流式显示慢加载提示
-                                // 注意：提示上方需要保持加载图标，所以添加提示后要恢复加载状态
-                                if (!uiState.streamResponse && delta.isNotEmpty() && !hasShownSlowLoadingHint) {
-                                    hasShownSlowLoadingHint = true
-                                    val hintText = "加载较慢？试试流式输出~"
-                                    // 启动协程来流式显示提示消息
-                                    hintTypingJob = streamingScope.launch {
-                                        for (char in hintText) {
-                                            withContext(Dispatchers.Main) {
-                                                uiState.appendToLastMessage(char.toString())
-                                                // 恢复加载状态，确保提示上方显示加载图标
-                                                uiState.updateLastMessageLoadingState(true)
+                                    // 非流式模式下，第一次收到数据时流式显示慢加载提示
+                                    // 注意：提示上方需要保持加载图标，所以添加提示后要恢复加载状态
+                                    if (!uiState.streamResponse && delta.isNotEmpty() && !hasShownSlowLoadingHint) {
+                                        hasShownSlowLoadingHint = true
+                                        val hintText = "加载较慢？试试流式输出~"
+                                        // 启动协程来流式显示提示消息
+                                        hintTypingJob = streamingScope.launch {
+                                            try {
+                                                for (char in hintText) {
+                                                    // 检查是否已被取消
+                                                    if (isCancelled) {
+                                                        break
+                                                    }
+                                                    withContext(Dispatchers.Main) {
+                                                        uiState.appendToLastMessage(char.toString())
+                                                        // 恢复加载状态，确保提示上方显示加载图标
+                                                        uiState.updateLastMessageLoadingState(true)
+                                                    }
+                                                    delay(30L) // 每个字符延迟30ms，营造打字机效果
+                                                }
+                                            } catch (e: CancellationException) {
+                                                // 协程被取消，这是正常操作
+                                                throw e
                                             }
-                                            delay(30L) // 每个字符延迟50ms，营造打字机效果
                                         }
                                     }
-                                }
 
                                 // 流式响应时逐字显示，非流式响应时一次性显示
                                 if (uiState.streamResponse) {
@@ -755,7 +767,6 @@ class ConversationLogic(
                     var lastUpdateTime = 0L
                     val UPDATE_INTERVAL_MS = 500L
                     var hasShownSlowLoadingHint = false // 标记是否已显示慢加载提示
-                    var hintTypingJob: Job? = null // 提示消息的流式显示协程
 
                     // 收集流式响应，在独立的协程中运行以便可以立即取消
                     streamingJob = streamingScope.launch {
@@ -776,13 +787,22 @@ class ConversationLogic(
                                         val hintText = "加载较慢？试试流式输出~"
                                         // 启动协程来流式显示提示消息
                                         hintTypingJob = streamingScope.launch {
-                                            for (char in hintText) {
-                                                withContext(Dispatchers.Main) {
-                                                    uiState.appendToLastMessage(char.toString())
-                                                    // 恢复加载状态，确保提示上方显示加载图标
-                                                    uiState.updateLastMessageLoadingState(true)
+                                            try {
+                                                for (char in hintText) {
+                                                    // 检查是否已被取消
+                                                    if (isCancelled) {
+                                                        break
+                                                    }
+                                                    withContext(Dispatchers.Main) {
+                                                        uiState.appendToLastMessage(char.toString())
+                                                        // 恢复加载状态，确保提示上方显示加载图标
+                                                        uiState.updateLastMessageLoadingState(true)
+                                                    }
+                                                    delay(30L) // 每个字符延迟30ms，营造打字机效果
                                                 }
-                                                delay(50L) // 每个字符延迟50ms，营造打字机效果
+                                            } catch (e: CancellationException) {
+                                                // 协程被取消，这是正常操作
+                                                throw e
                                             }
                                         }
                                     }
