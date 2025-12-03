@@ -61,6 +61,7 @@ class UserPreferencesRepository(private val context: Context) {
         val STREAM_RESPONSE = booleanPreferencesKey("stream_response")
         val ACTIVE_PROVIDER_ID = stringPreferencesKey("active_provider_id")
         val ACTIVE_MODEL_ID = stringPreferencesKey("active_model_id")
+        val IS_RAG_ENABLED = booleanPreferencesKey("is_rag_enabled")
     }
 
     /**
@@ -179,6 +180,23 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateActiveModelId(id: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.ACTIVE_MODEL_ID] = id
+        }
+    }
+
+    /**
+     * 知识库启用状态流。
+     */
+    val isRagEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.IS_RAG_ENABLED] ?: true
+        }
+
+    /**
+     * 更新知识库启用状态。
+     */
+    suspend fun updateRagEnabled(isEnabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_RAG_ENABLED] = isEnabled
         }
     }
 }

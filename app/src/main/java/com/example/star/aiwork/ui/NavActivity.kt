@@ -86,6 +86,7 @@ class NavActivity : AppCompatActivity() {
                     val sessions by chatViewModel.sessions.collectAsStateWithLifecycle()
                     val currentSession by chatViewModel.currentSession.collectAsStateWithLifecycle()
                     val knownKnowledgeBases by mainViewModel.knownKnowledgeBases.collectAsStateWithLifecycle()
+                    val isRagEnabled by mainViewModel.isRagEnabled.collectAsStateWithLifecycle()
 
                     // 记录当前选中的菜单项
                     var selectedMenu by remember { mutableStateOf("composers") }
@@ -143,6 +144,7 @@ class NavActivity : AppCompatActivity() {
                         agents = agents,
                         sessions = sessions,
                         knownKnowledgeBases = knownKnowledgeBases,
+                        isRagEnabled = isRagEnabled,
                         onChatClicked = { sessionId ->
                             val session = sessions.find { it.id == sessionId }
                             if (session != null) {
@@ -251,6 +253,9 @@ class NavActivity : AppCompatActivity() {
                             if (session != null) {
                                 sessionToDelete = session
                             }
+                        },
+                        onRagEnabledChanged = { isEnabled ->
+                            mainViewModel.updateRagEnabled(isEnabled)
                         }
                     ) {
                         // 侧滑菜单的主要内容区域：嵌入基于 XML 的 Fragment 导航

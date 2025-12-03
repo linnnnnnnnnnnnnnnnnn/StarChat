@@ -133,6 +133,13 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+        
+    val isRagEnabled: StateFlow<Boolean> = userPreferencesRepository.isRagEnabled
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
 
     init {
         viewModelScope.launch {
@@ -231,11 +238,21 @@ class MainViewModel(
         }
     }
     
+    fun updateRagEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateRagEnabled(isEnabled)
+        }
+    }
+    
     /**
      * 检索知识库中的相关上下文
      */
     suspend fun retrieveKnowledge(query: String): String {
-        return ragService.retrieve(query).context
+        return if (isRagEnabled.value) {
+            ragService.retrieve(query).context
+        } else {
+            ""
+        }
     }
 
     /**

@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -97,9 +98,11 @@ fun JetchatDrawer(
     onArchiveSession: (String) -> Unit = {},
     onPinSession: (String) -> Unit = {},
     onDeleteSession: (String) -> Unit = {},
+    onRagEnabledChanged: (Boolean) -> Unit = {},
     agents: List<Agent> = emptyList(),
     sessions: List<SessionEntity> = emptyList(),
     knownKnowledgeBases: List<String> = emptyList(),
+    isRagEnabled: Boolean = true,
     selectedMenu: String = "",
     content: @Composable () -> Unit,
 ) {
@@ -121,9 +124,11 @@ fun JetchatDrawer(
                         onArchiveSession = onArchiveSession,
                         onPinSession = onPinSession,
                         onDeleteSession = onDeleteSession,
+                        onRagEnabledChanged = onRagEnabledChanged,
                         agents = agents,
                         sessions = sessions,
                         knownKnowledgeBases = knownKnowledgeBases,
+                        isRagEnabled = isRagEnabled,
                         selectedMenu = selectedMenu
                     )
                 }
@@ -163,9 +168,11 @@ fun JetchatDrawerContent(
     onArchiveSession: (String) -> Unit,
     onPinSession: (String) -> Unit,
     onDeleteSession: (String) -> Unit,
+    onRagEnabledChanged: (Boolean) -> Unit,
     agents: List<Agent>,
     sessions: List<SessionEntity>,
     knownKnowledgeBases: List<String>,
+    isRagEnabled: Boolean,
     selectedMenu: String
 ) {
     // 使用 windowInsetsTopHeight() 添加一个 Spacer，将抽屉内容向下推
@@ -202,6 +209,12 @@ fun JetchatDrawerContent(
 
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("知识库")
+        
+        RagSwitchItem(
+            checked = isRagEnabled,
+            onCheckedChange = onRagEnabledChanged
+        )
+        
         KnowledgeItem(
             "PDF 导入",
             false
@@ -676,6 +689,49 @@ private fun KnowledgeBaseItem(
     }
 }
 
+@Composable
+private fun RagSwitchItem(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .height(56.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .clickable { onCheckedChange(!checked) },
+        verticalAlignment = CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = CenterVertically) {
+            val paddingSizeModifier = Modifier
+                .padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
+                .size(24.dp)
+            
+            // 使用一个代表知识库/数据库的图标，或者复用 Description
+            Icon(
+                imageVector = Icons.Default.Description, 
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = paddingSizeModifier,
+                contentDescription = null
+            )
+            
+            Text(
+                "启用知识库 (RAG)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
+        
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.padding(end = 16.dp)
+        )
+    }
+}
+
 /**
  * 分隔线组件。
  */
@@ -709,9 +765,11 @@ fun DrawerPreview() {
                     onArchiveSession = {},
                     onPinSession = {},
                     onDeleteSession = {},
+                    onRagEnabledChanged = {},
                     agents = emptyList(),
                     sessions = emptyList(),
                     knownKnowledgeBases = listOf("doc1.pdf", "report_final.pdf"),
+                    isRagEnabled = true,
                     selectedMenu = ""
                 )
             }
@@ -741,9 +799,11 @@ fun DrawerPreviewDark() {
                     onArchiveSession = {},
                     onPinSession = {},
                     onDeleteSession = {},
+                    onRagEnabledChanged = {},
                     agents = emptyList(),
                     sessions = emptyList(),
                     knownKnowledgeBases = listOf("doc1.pdf", "report_final.pdf"),
+                    isRagEnabled = true,
                     selectedMenu = ""
                 )
             }
