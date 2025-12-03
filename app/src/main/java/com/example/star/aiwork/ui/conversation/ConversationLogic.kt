@@ -95,7 +95,6 @@ class ConversationLogic(
         }
         
         // 保存当前内容到数据库（包含取消提示）
-        /*
         if (currentContent.isNotEmpty()) {
             persistenceGateway?.replaceLastAssistantMessage(
                 sessionId,
@@ -105,7 +104,6 @@ class ConversationLogic(
                 )
             )
         }
-        */
         
         val taskId = activeTaskId
         if (taskId != null) {
