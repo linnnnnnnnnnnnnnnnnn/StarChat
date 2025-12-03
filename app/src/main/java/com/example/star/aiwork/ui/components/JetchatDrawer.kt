@@ -39,6 +39,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -54,7 +56,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment.Companion.CenterStart
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
@@ -161,6 +166,8 @@ fun JetchatDrawerContent(
     // 以避开状态栏 (Status Bar) 区域
     // 使用 verticalScroll 使内容可滚动，确保所有会话都能访问
     val scrollState = rememberScrollState()
+    var isAgentsExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.verticalScroll(scrollState)
     ) {
@@ -171,13 +178,19 @@ fun JetchatDrawerContent(
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("角色市场")
         MarketItem(onPromptMarketClicked)
-        agents.forEach { agent ->
-            AgentItem(
-                agent = agent,
-                selected = false, // Can be updated to track selection
-                onAgentClicked = { onAgentClicked(agent) },
-                onAgentDelete = { onAgentDelete(agent) }
-            )
+        
+        if (agents.isNotEmpty()) {
+             CollapsibleDrawerItemHeader("我的智能体", isAgentsExpanded) { isAgentsExpanded = !isAgentsExpanded }
+             if (isAgentsExpanded) {
+                agents.forEach { agent ->
+                    AgentItem(
+                        agent = agent,
+                        selected = false, // Can be updated to track selection
+                        onAgentClicked = { onAgentClicked(agent) },
+                        onAgentDelete = { onAgentDelete(agent) }
+                    )
+                }
+             }
         }
 
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
@@ -291,6 +304,35 @@ private fun DrawerItemHeader(text: String) {
             text,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CollapsibleDrawerItemHeader(
+    text: String,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 32.dp)
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 28.dp, vertical = 4.dp),
+        verticalAlignment = CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Icon(
+            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+            contentDescription = if (isExpanded) "Collapse" else "Expand",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
         )
     }
 }
