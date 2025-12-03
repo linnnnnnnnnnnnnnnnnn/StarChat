@@ -127,6 +127,19 @@ class ConversationUiState(
             _messages.removeAt(index)
         }
     }
+
+    /**
+     * 替换最后一条消息的内容（用于非流式模式下取消时清空内容）
+     */
+    fun replaceLastMessageContent(newContent: String) {
+        if (_messages.isNotEmpty()) {
+            val lastMsg = _messages[0]
+            _messages[0] = lastMsg.copy(
+                content = newContent,
+                isLoading = false
+            )
+        }
+    }
 }
 
 /**

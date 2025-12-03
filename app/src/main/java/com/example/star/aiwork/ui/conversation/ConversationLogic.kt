@@ -75,23 +75,34 @@ class ConversationLogic(
     private var streamingJob: Job? = null
     // 创建独立的协程作用域用于流式收集，以便可以独立取消
     private val streamingScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // 标记是否已被取消，用于非流式模式下避免显示已收集的内容
+    @Volatile private var isCancelled = false
 
     /**
      * 取消当前的流式生成。
      */
     suspend fun cancelStreaming() {
         // 立即取消流式收集协程
+        isCancelled = true
         streamingJob?.cancel()
         streamingJob = null
         
-        // 在消息末尾追加取消提示
-        var currentContent = ""
+        // 根据流式模式决定处理方式
+        val currentContent: String
         withContext(Dispatchers.Main) {
-            uiState.appendToLastMessage("\n（已取消生成）")
-            uiState.updateLastMessageLoadingState(false)
-            // 获取当前消息内容（包含取消提示）
-            val lastMessage = uiState.messages.firstOrNull { it.author == "AI" }
-            currentContent = lastMessage?.content ?: ""
+            if (uiState.streamResponse) {
+                // 流式模式：在消息末尾追加取消提示
+                uiState.appendToLastMessage("\n（已取消生成）")
+                uiState.updateLastMessageLoadingState(false)
+                // 获取当前消息内容（包含取消提示）
+                val lastMessage = uiState.messages.firstOrNull { it.author == "AI" }
+                currentContent = lastMessage?.content ?: ""
+            } else {
+                // 非流式模式：清空已收集的内容，只显示取消提示
+                uiState.replaceLastMessageContent("（已取消生成）")
+                uiState.updateLastMessageLoadingState(false)
+                currentContent = "（已取消生成）"
+            }
         }
         
         // 保存当前内容到数据库（包含取消提示）
@@ -397,6 +408,8 @@ class ConversationLogic(
                 )
 
                 activeTaskId = sendResult.taskId
+                // 重置取消标志
+                isCancelled = false
 
                 var fullResponse = ""
                 var lastUpdateTime = 0L
@@ -478,8 +491,9 @@ class ConversationLogic(
                 }
                 
                 // 流式响应结束后，如果是非流式模式，一次性显示完整内容
+                // 但如果已被取消，则不显示已收集的内容（cancelStreaming 已经处理了）
                 withContext(Dispatchers.Main) {
-                    if (!uiState.streamResponse && fullResponse.isNotBlank()) {
+                    if (!uiState.streamResponse && fullResponse.isNotBlank() && !isCancelled) {
                         uiState.updateLastMessageLoadingState(false)
                         uiState.appendToLastMessage(fullResponse)
                     }
@@ -707,6 +721,8 @@ class ConversationLogic(
                     }
 
                     activeTaskId = flowResult.taskId
+                    // 重置取消标志
+                    isCancelled = false
 
                     var fullResponse = ""
                     var lastUpdateTime = 0L
@@ -757,8 +773,9 @@ class ConversationLogic(
                     streamingJob = null
 
                     // 流式响应结束后，如果是非流式模式，一次性显示完整内容
+                    // 但如果已被取消，则不显示已收集的内容（cancelStreaming 已经处理了）
                     withContext(Dispatchers.Main) {
-                        if (!uiState.streamResponse && fullResponse.isNotBlank()) {
+                        if (!uiState.streamResponse && fullResponse.isNotBlank() && !isCancelled) {
                             uiState.updateLastMessageLoadingState(false)
                             uiState.appendToLastMessage(fullResponse)
                         }
@@ -766,7 +783,8 @@ class ConversationLogic(
                     }
 
                     // 更新最终内容到数据库
-                    if (fullResponse.isNotBlank()) {
+                    // 但如果已被取消，则不保存已收集的内容（cancelStreaming 已经保存了取消提示）
+                    if (fullResponse.isNotBlank() && !isCancelled) {
                         persistenceGateway?.replaceLastAssistantMessage(
                             sessionId,
                             ChatDataItem(
