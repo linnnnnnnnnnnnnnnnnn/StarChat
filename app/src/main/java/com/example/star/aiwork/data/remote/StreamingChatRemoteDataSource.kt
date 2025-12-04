@@ -28,6 +28,10 @@ class StreamingChatRemoteDataSource(
     private val geminiRemoteDataSource: GeminiRemoteDataSource =
         GeminiStreamingRemoteDataSource(sseClient, jsonParser)
 
+    // Dify 的具体实现
+    private val difyStreamingRemoteDataSource =
+        DifyStreamingRemoteDataSource(sseClient, jsonParser)
+
     override fun streamChat(
         history: List<ChatDataItem>,
         providerSetting: ProviderSetting,
@@ -53,6 +57,15 @@ class StreamingChatRemoteDataSource(
                 openAIStreamingRemoteDataSource.streamChat(
                     history = aiMessages,
                     config = config
+                )
+            }
+
+            is ProviderSetting.Dify -> {
+                difyStreamingRemoteDataSource.streamChat(
+                    history = history,
+                    setting = providerSetting,
+                    params = params,
+                    taskId = taskId
                 )
             }
 
