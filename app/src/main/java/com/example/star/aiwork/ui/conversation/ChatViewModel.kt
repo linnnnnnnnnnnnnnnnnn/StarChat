@@ -1,6 +1,7 @@
 package com.example.star.aiwork.ui.conversation
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope

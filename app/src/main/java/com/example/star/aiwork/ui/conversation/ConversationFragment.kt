@@ -137,25 +137,21 @@ class ConversationFragment : Fragment() {
                             chatViewModel.renameSession(sessionId, newName)
                         },
                         onPersistNewChatSession = { sessionId ->
-                            scope.launch {
-                                // 如果当前没有会话，先创建临时会话
-                                if (currentSession == null) {
-                                    // 创建临时会话，使用传入的 sessionId
-                                    // 注意：这里我们需要创建一个临时会话并标记为新会话
-                                    val sessionName = "新聊天"
-                                    chatViewModel.createTemporarySession(sessionName)
-                                }
-                                chatViewModel.persistNewChatSession(sessionId)
+                            // 如果当前没有会话，先创建临时会话
+                            if (currentSession == null) {
+                                // 创建临时会话，使用传入的 sessionId
+                                // 注意：这里我们需要创建一个临时会话并标记为新会话
+                                val sessionName = "新聊天"
+                                chatViewModel.createTemporarySession(sessionName)
                             }
+                            chatViewModel.persistNewChatSession(sessionId)
                         },
                         isNewChat = { sessionId ->
                             chatViewModel.isNewChat(sessionId)
                         },
                         onSessionUpdated = { sessionId ->
                             // 刷新会话列表，让 drawer 中的会话按 updatedAt 排序
-                            scope.launch {
-                                chatViewModel.refreshSessions()
-                            }
+                            chatViewModel.refreshSessions()
                         }
                     )
                 }
@@ -166,8 +162,9 @@ class ConversationFragment : Fragment() {
                     }
                 }
 
-                // 当会话或消息变化时，同步数据库消息到 UI 状态
-                LaunchedEffect(convertedMessages, currentSession?.id) {
+                // 只在会话切换时，从数据库同步消息到 UI 状态
+                // 注意：不在消息内容变化时同步，以避免清空临时的加载占位消息
+                LaunchedEffect(currentSession?.id) {
                     currentSession?.let { session ->
                         val sessionUiState = chatViewModel.getOrCreateSessionUiState(session.id, session.name)
                         // 清空现有消息
