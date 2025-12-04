@@ -807,7 +807,7 @@ class ConversationLogic(
                 .filter { it.author != "System" } // 过滤掉 System 消息
             
             // 找到最后一条助手消息的索引并排除它
-            val lastAssistantIndex = allMessages.indexOfFirst { it.author != authorMe }
+            val lastAssistantIndex = allMessages.indexOfLast { it.author != authorMe }
             val historyMessages = if (lastAssistantIndex >= 0) {
                 allMessages.take(lastAssistantIndex) + allMessages.drop(lastAssistantIndex + 1)
             } else {
@@ -823,7 +823,7 @@ class ConversationLogic(
             }.toMutableList()
 
             // 获取最后一条用户消息（用于重新生成）
-            val lastUserMsg = historyMessages.lastOrNull { it.author == authorMe }
+            val lastUserMsg = historyMessages.firstOrNull { it.author == authorMe }
             if (lastUserMsg == null) {
                 withContext(Dispatchers.Main) {
                     uiState.isGenerating = false
@@ -1027,6 +1027,7 @@ class ConversationLogic(
                             // 直接替换消息内容，这样会自动移除之前添加的慢加载提示
                             uiState.replaceLastMessageContent(fullResponse)
                         }
+                        Log.d("ConversationLogic", "流式响应结束")
                         uiState.isGenerating = false
                     }
 
