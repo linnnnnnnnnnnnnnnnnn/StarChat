@@ -166,17 +166,9 @@ class ConversationLogic(
         if (!isAutoTriggered && (uiState.channelName == "New Chat" || uiState.channelName == "新聊天" || uiState.channelName == "新会话" || uiState.channelName == "new chat") && uiState.messages.none { it.author == authorMe }) {
             val newTitle = inputContent.take(20).trim()
             if (newTitle.isNotBlank()) {
-                Log.d("ConversationLogic", "🔄 [Auto-Rename] 检测到默认会话名称，准备重命名")
-                Log.d("ConversationLogic", "  - 会话ID: $sessionId")
-                Log.d("ConversationLogic", "  - 当前名称: ${uiState.channelName}")
-                Log.d("ConversationLogic", "  - 新名称: $newTitle")
-                // 如果是新会话，先等待持久化完成
-                if (isNewChat(sessionId)) {
-                    Log.d("ConversationLogic", "  - 检测到新会话，等待持久化完成...")
-                    onPersistNewChatSession(sessionId)
-                    // 等待一小段时间确保持久化完成
-                    delay(50)
-                }
+
+                // 持久化已经在第161-163行完成，这里不需要再次调用
+                // 如果 isNewChat 返回 false，说明持久化已完成，可以直接重命名
                 onRenameSession(sessionId, newTitle)
                 // 刷新会话列表，确保侧边栏同步更新
                 onSessionUpdated(sessionId)
