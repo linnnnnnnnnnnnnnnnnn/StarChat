@@ -62,6 +62,11 @@ class ConversationUiState(
     var autoLoopProviderId: String? by mutableStateOf(null)
     var autoLoopModelId: String? by mutableStateOf(null)
 
+    // 兜底机制配置
+    var isFallbackEnabled: Boolean by mutableStateOf(true)
+    var fallbackProviderId: String? by mutableStateOf(null)
+    var fallbackModelId: String? by mutableStateOf(null)
+
     // 当前激活的 Agent
     var activeAgent: Agent? by mutableStateOf(null)
 
