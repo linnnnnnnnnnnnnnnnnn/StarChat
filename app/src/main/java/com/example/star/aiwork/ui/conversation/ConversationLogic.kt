@@ -556,51 +556,83 @@ class ConversationLogic(
                 // --- Auto-Loop Logic with Planner ---
                 if (uiState.isAutoLoopEnabled && loopCount < uiState.maxLoopCount && fullResponse.isNotBlank()) {
 
-                    // Step 2: 调用 Planner 模型生成下一步追问
-                    val plannerSystemPrompt = """
-                                        You are a task planner agent.
-                                        Analyze the previous AI response and generate a short, specific instruction for the next step to deepen the task or solve remaining issues.
-                                        If the task appears complete or no further meaningful steps are needed, reply with exactly "STOP".
-                                        Output ONLY the instruction or "STOP".
-                                    """.trimIndent()
+                    // Determine which provider/model to use for the planner
+                    // Default to current settings if not specified in auto-loop config
+                    val plannerProviderId = uiState.autoLoopProviderId
+                    val plannerModelId = uiState.autoLoopModelId
 
-                    val plannerUserMessage = ChatDataItem(
-                        role = "user",
-                        content = "Previous Response:\n$fullResponse"
-                    )
+                    var plannerProviderSetting: ProviderSetting? = providerSetting
+                    var plannerModel: Model? = model
 
-                    val plannerHistory = listOf<ChatDataItem>(
-                        ChatDataItem(role="system", content=plannerSystemPrompt)
-                    )
-
-                    val plannerResult = sendMessageUseCase(
-                        sessionId = UUID.randomUUID().toString(), // Use a temporary session for planning
-                        userMessage = plannerUserMessage,
-                        history = plannerHistory,
-                        providerSetting = providerSetting,
-                        params = TextGenerationParams(
-                            model = model,
-                            temperature = 0.3f, // Lower temperature for more deterministic instructions
-                            maxTokens = 100
-                        )
-                    )
-
-                    var nextInstruction = ""
-                    plannerResult.stream.collect { delta ->
-                        nextInstruction += delta
+                    if (plannerProviderId != null) {
+                         val foundProvider = getProviderSettings().find { it.id == plannerProviderId }
+                         if (foundProvider != null) {
+                             plannerProviderSetting = foundProvider
+                             if (plannerModelId != null) {
+                                 val foundModel = foundProvider.models.find { it.modelId == plannerModelId }
+                                 if (foundModel != null) {
+                                     plannerModel = foundModel
+                                 } else {
+                                     // If specified model not found, use first available
+                                     plannerModel = foundProvider.models.firstOrNull()
+                                 }
+                             } else {
+                                 plannerModel = foundProvider.models.firstOrNull()
+                             }
+                         }
                     }
-                    nextInstruction = nextInstruction.trim()
 
-                    if (nextInstruction != "STOP" && nextInstruction.isNotEmpty()) {
-                        // 递归调用，使用 Planner 生成的指令
-                        processMessage(
-                            inputContent = nextInstruction,
-                            providerSetting = providerSetting,
-                            model = model,
-                            isAutoTriggered = true,
-                            loopCount = loopCount + 1,
-                            retrieveKnowledge = retrieveKnowledge
+                    if (plannerProviderSetting != null && plannerModel != null) {
+                        // Step 2: 调用 Planner 模型生成下一步追问
+                        val plannerSystemPrompt = """
+                                            You are a task planner agent.
+                                            Analyze the previous AI response and generate a short, specific instruction for the next step to deepen the task or solve remaining issues.
+                                            If the task appears complete or no further meaningful steps are needed, reply with exactly "STOP".
+                                            Output ONLY the instruction or "STOP".
+                                        """.trimIndent()
+
+                        val plannerUserMessage = ChatDataItem(
+                            role = "user",
+                            content = "Previous Response:\n$fullResponse"
                         )
+
+                        val plannerHistory = listOf<ChatDataItem>(
+                            ChatDataItem(role="system", content=plannerSystemPrompt)
+                        )
+
+                        val plannerResult = sendMessageUseCase(
+                            sessionId = UUID.randomUUID().toString(), // Use a temporary session for planning
+                            userMessage = plannerUserMessage,
+                            history = plannerHistory,
+                            providerSetting = plannerProviderSetting,
+                            params = TextGenerationParams(
+                                model = plannerModel,
+                                temperature = 0.3f, // Lower temperature for more deterministic instructions
+                                maxTokens = 100
+                            )
+                        )
+
+                        var nextInstruction = ""
+                        plannerResult.stream.collect { delta ->
+                            nextInstruction += delta
+                        }
+                        nextInstruction = nextInstruction.trim()
+
+                        if (nextInstruction != "STOP" && nextInstruction.isNotEmpty()) {
+                            // 递归调用，使用 Planner 生成的指令
+                            processMessage(
+                                inputContent = nextInstruction,
+                                providerSetting = providerSetting, // Use original provider for execution
+                                model = model, // Use original model for execution
+                                isAutoTriggered = true,
+                                loopCount = loopCount + 1,
+                                retrieveKnowledge = retrieveKnowledge
+                            )
+                        }
+                    } else {
+                         withContext(Dispatchers.Main) {
+                            uiState.addMessage(Message("System", "Auto-loop planner configuration invalid or provider not found.", timeNow))
+                        }
                     }
                 }
 

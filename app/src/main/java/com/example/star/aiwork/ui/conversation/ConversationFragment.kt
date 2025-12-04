@@ -127,6 +127,7 @@ class ConversationFragment : Fragment() {
                     currentSession?.id,
                     uiState,
                     chatViewModel,
+                    providerSettings // Add providerSettings as a dependency
                 ) {
                     ConversationLogic(
                         uiState = uiState,

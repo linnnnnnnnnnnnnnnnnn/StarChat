@@ -158,6 +158,7 @@ fun ConversationContent(
     if (showSettingsDialog) {
         ModelSettingsDialog(
             uiState = uiState,
+            providerSettings = providerSettings,
             onDismissRequest = {
                 // 当对话框关闭时保存设置
                 onUpdateSettings(uiState.temperature, uiState.maxTokens, uiState.streamResponse)

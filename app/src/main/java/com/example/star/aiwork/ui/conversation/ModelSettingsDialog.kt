@@ -1,22 +1,37 @@
 package com.example.star.aiwork.ui.conversation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.star.aiwork.domain.model.ProviderSetting
 import kotlin.math.roundToInt
 
 /**
@@ -26,10 +41,12 @@ import kotlin.math.roundToInt
  * - Temperature (温度，创造性 vs 精确性)
  * - Max Tokens (最大 Token 数，响应长度)
  * - Stream Response (流式响应，启用/禁用流式传输)
+ * - Auto-Loop 设置
  */
 @Composable
 fun ModelSettingsDialog(
     uiState: ConversationUiState,
+    providerSettings: List<ProviderSetting> = emptyList(),
     onDismissRequest: () -> Unit
 ) {
     AlertDialog(
@@ -41,7 +58,11 @@ fun ModelSettingsDialog(
             )
         },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
                 // 温度设置滑块
                 Text(
                     text = "温度",
@@ -182,6 +203,89 @@ fun ModelSettingsDialog(
                         steps = 9,
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Planner Model (执行规划的模型)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "如果不选，默认使用当前聊天的模型",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Provider Selection for Auto-Loop
+                    var expandedProvider by remember { mutableStateOf(false) }
+                    val selectedProviderId = uiState.autoLoopProviderId
+                    val selectedProvider = providerSettings.find { it.id == selectedProviderId }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Planner Provider:", style = MaterialTheme.typography.bodyMedium)
+                    Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart)) {
+                        OutlinedButton(onClick = { expandedProvider = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(selectedProvider?.name ?: "Default (Current Chat Provider)")
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = expandedProvider,
+                            onDismissRequest = { expandedProvider = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Default (Current Chat Provider)") },
+                                onClick = {
+                                    uiState.autoLoopProviderId = null
+                                    uiState.autoLoopModelId = null
+                                    expandedProvider = false
+                                }
+                            )
+                            providerSettings.filter { it.enabled }.forEach { provider ->
+                                DropdownMenuItem(
+                                    text = { Text(provider.name) },
+                                    onClick = {
+                                        uiState.autoLoopProviderId = provider.id
+                                        // Reset model when provider changes
+                                        uiState.autoLoopModelId = provider.models.firstOrNull()?.modelId
+                                        expandedProvider = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Model Selection for Auto-Loop
+                    if (selectedProvider != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Planner Model:", style = MaterialTheme.typography.bodyMedium)
+                        
+                        var expandedModel by remember { mutableStateOf(false) }
+                        val selectedModelId = uiState.autoLoopModelId
+                        val selectedModel = selectedProvider.models.find { it.modelId == selectedModelId }
+                        
+                        Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart)) {
+                             OutlinedButton(onClick = { expandedModel = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedModel?.displayName ?: selectedModelId ?: "Select Model")
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                            DropdownMenu(
+                                expanded = expandedModel,
+                                onDismissRequest = { expandedModel = false }
+                            ) {
+                                selectedProvider.models.forEach { model ->
+                                     DropdownMenuItem(
+                                        text = { Text(model.displayName.ifBlank { model.modelId }) },
+                                        onClick = {
+                                            uiState.autoLoopModelId = model.modelId
+                                            expandedModel = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

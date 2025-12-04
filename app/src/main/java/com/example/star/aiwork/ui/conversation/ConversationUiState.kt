@@ -57,6 +57,10 @@ class ConversationUiState(
     // Auto-Agent Loop (轻量自动化循环) 状态
     var isAutoLoopEnabled: Boolean by mutableStateOf(false)
     var maxLoopCount: Int by mutableIntStateOf(3)
+    
+    // Auto-Loop Planner 模型选择 (如果为 null，则使用当前对话模型)
+    var autoLoopProviderId: String? by mutableStateOf(null)
+    var autoLoopModelId: String? by mutableStateOf(null)
 
     // 当前激活的 Agent
     var activeAgent: Agent? by mutableStateOf(null)
