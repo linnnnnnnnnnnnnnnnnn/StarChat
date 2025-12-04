@@ -151,9 +151,7 @@ class ConversationFragment : Fragment() {
                         },
                         onSessionUpdated = { sessionId ->
                             // 刷新会话列表，让 drawer 中的会话按 updatedAt 排序
-                            scope.launch {
-                                chatViewModel.refreshSessions()
-                            }
+                            chatViewModel.refreshSessions()
                         }
                     )
                 }
