@@ -12,6 +12,7 @@ import java.util.UUID
  * @property displayName 在应用 UI 中显示的友好名称。
  * @property id 本地数据库或配置中该模型条目的唯一标识符 (UUID)。
  * @property type 模型类型 (聊天、绘图、嵌入)。
+ * @property category 模型分类标签 (例如 "GPT-4", "Claude 3" 等)。
  * @property customHeaders 调用该模型时附加的 HTTP 请求头。
  * @property customBodies 调用该模型时附加的 HTTP 请求体参数。
  * @property inputModalities 模型支持的输入模态 (文本、图片等)。
@@ -27,6 +28,7 @@ data class Model(
     val displayName: String = "",
     val id: String = UUID.randomUUID().toString(),
     val type: ModelType = ModelType.CHAT,
+    val category: String? = null,
     val customHeaders: List<CustomHeader> = emptyList(),
     val customBodies: List<CustomBody> = emptyList(),
     val inputModalities: List<Modality> = listOf(Modality.TEXT),

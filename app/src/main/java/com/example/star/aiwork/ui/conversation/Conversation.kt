@@ -98,6 +98,7 @@ import java.util.UUID
  * @param maxTokens 生成的最大 Token 数。
  * @param streamResponse 是否流式传输 AI 响应或等待完整响应。
  * @param onUpdateSettings 更新模型设置（温度、最大 Token 数、流式响应）的回调。
+ * @param onUpdateFallbackSettings 更新兜底模型设置（启用状态、Provider ID、Model ID）的回调。
  * @param retrieveKnowledge 检索知识库的回调函数。
  * @param currentSessionId 当前会话 ID，用于消息持久化
  */
@@ -115,7 +116,11 @@ fun ConversationContent(
     temperature: Float = 0.7f,
     maxTokens: Int = 2000,
     streamResponse: Boolean = true,
+    isFallbackEnabled: Boolean = true,
+    fallbackProviderId: String? = null,
+    fallbackModelId: String? = null,
     onUpdateSettings: (Float, Int, Boolean) -> Unit = { _, _, _ -> },
+    onUpdateFallbackSettings: (Boolean, String?, String?) -> Unit = { _, _, _ -> },
     retrieveKnowledge: suspend (String) -> String = { "" },
     currentSessionId: String? = null,
     searchQuery: String,
@@ -138,10 +143,13 @@ fun ConversationContent(
 
     // 将从 ViewModel 传递的参数与 UiState 同步
     // 这确保了 UI 反映持久化的设置
-    LaunchedEffect(temperature, maxTokens, streamResponse) {
+    LaunchedEffect(temperature, maxTokens, streamResponse, isFallbackEnabled, fallbackProviderId, fallbackModelId) {
         uiState.temperature = temperature
         uiState.maxTokens = maxTokens
         uiState.streamResponse = streamResponse
+        uiState.isFallbackEnabled = isFallbackEnabled
+        uiState.fallbackProviderId = fallbackProviderId
+        uiState.fallbackModelId = fallbackModelId
     }
 
     // 拖放视觉状态
@@ -161,6 +169,7 @@ fun ConversationContent(
             onDismissRequest = {
                 // 当对话框关闭时保存设置
                 onUpdateSettings(uiState.temperature, uiState.maxTokens, uiState.streamResponse)
+                onUpdateFallbackSettings(uiState.isFallbackEnabled, uiState.fallbackProviderId, uiState.fallbackModelId)
                 showSettingsDialog = false
             }
         )

@@ -42,6 +42,7 @@ import kotlin.math.roundToInt
  * - Max Tokens (最大 Token 数，响应长度)
  * - Stream Response (流式响应，启用/禁用流式传输)
  * - Auto-Loop 设置
+ * - Fallback Mechanism (兜底机制)
  */
 @Composable
 fun ModelSettingsDialog(
@@ -158,6 +159,118 @@ fun ModelSettingsDialog(
                 
                 HorizontalDivider()
                 
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 兜底机制开关
+                Text(
+                    text = "错误兜底机制",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "出错时自动切换模型重试",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = uiState.isFallbackEnabled,
+                        onCheckedChange = { uiState.isFallbackEnabled = it }
+                    )
+                }
+
+                // Fallback Model Selection
+                if (uiState.isFallbackEnabled) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "兜底模型 (Fallback Model)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "当主模型调用失败时，将尝试使用此模型",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Provider Selection for Fallback
+                    var expandedFallbackProvider by remember { mutableStateOf(false) }
+                    val selectedFallbackProviderId = uiState.fallbackProviderId
+                    val selectedFallbackProvider = providerSettings.find { it.id == selectedFallbackProviderId }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Fallback Provider:", style = MaterialTheme.typography.bodyMedium)
+                    Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart)) {
+                        OutlinedButton(onClick = { expandedFallbackProvider = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(selectedFallbackProvider?.name ?: "默认本地ollama")
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = expandedFallbackProvider,
+                            onDismissRequest = { expandedFallbackProvider = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("默认本地ollama") },
+                                onClick = {
+                                    uiState.fallbackProviderId = null
+                                    uiState.fallbackModelId = null
+                                    expandedFallbackProvider = false
+                                }
+                            )
+                            providerSettings.filter { it.enabled }.forEach { provider ->
+                                DropdownMenuItem(
+                                    text = { Text(provider.name) },
+                                    onClick = {
+                                        uiState.fallbackProviderId = provider.id
+                                        // Reset model when provider changes
+                                        uiState.fallbackModelId = provider.models.firstOrNull()?.modelId
+                                        expandedFallbackProvider = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Model Selection for Fallback
+                    if (selectedFallbackProvider != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Fallback Model:", style = MaterialTheme.typography.bodyMedium)
+                        
+                        var expandedFallbackModel by remember { mutableStateOf(false) }
+                        val selectedFallbackModelId = uiState.fallbackModelId
+                        val selectedFallbackModel = selectedFallbackProvider.models.find { it.modelId == selectedFallbackModelId }
+                        
+                        Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart)) {
+                             OutlinedButton(onClick = { expandedFallbackModel = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(selectedFallbackModel?.displayName ?: selectedFallbackModelId ?: "Select Model")
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                            }
+                            DropdownMenu(
+                                expanded = expandedFallbackModel,
+                                onDismissRequest = { expandedFallbackModel = false }
+                            ) {
+                                selectedFallbackProvider.models.forEach { model ->
+                                     DropdownMenuItem(
+                                        text = { Text(model.displayName.ifBlank { model.modelId }) },
+                                        onClick = {
+                                            uiState.fallbackModelId = model.modelId
+                                            expandedFallbackModel = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Auto-Loop 开关

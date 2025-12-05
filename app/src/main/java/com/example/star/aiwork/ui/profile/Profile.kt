@@ -216,11 +216,39 @@ fun ModelListDialog(
                 it.displayName.contains(searchQuery, ignoreCase = true) || 
                 it.modelId.contains(searchQuery, ignoreCase = true) 
             }
-            filtered.groupBy { getModelGroup(it.modelId) }.toSortedMap()
+            // 优先使用 category，否则使用 getModelGroup 推断
+            filtered.groupBy { it.category ?: getModelGroup(it.modelId) }.toSortedMap()
         }
     }
     
     val groupedModels = groupedModelsState.value
+    
+    // 使用一个 Map<String, Boolean> 来存储展开状态，key 是分组名，value 是是否展开
+    var expandedGroups by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    
+    LaunchedEffect(groupedModels) {
+        if (groupedModels != null) {
+            // 如果是搜索中，全部展开以便查看结果
+            if (searchQuery.isNotBlank()) {
+                expandedGroups = groupedModels.keys.associateWith { true }
+            } else if (expandedGroups.isEmpty() && groupedModels.isNotEmpty()) {
+                 // 默认展开包含 activeModelId 的组，或者如果 activeModelId 为空，则全部折叠
+                 val activeGroup = groupedModels.entries.find { entry -> 
+                     entry.value.any { it.modelId == activeModelId } 
+                 }?.key
+                 
+                 if (activeGroup != null) {
+                    expandedGroups = groupedModels.keys.associateWith { it == activeGroup }
+                 } else {
+                     // 如果没有活跃模型，或者找不到，可以默认展开第一个，或者全折叠
+                     // 这里选择全折叠，或者如果你希望默认展开第一个，可以解开下面的注释
+                     // val firstGroup = groupedModels.keys.firstOrNull()
+                     // expandedGroups = groupedModels.keys.associateWith { it == firstGroup }
+                     expandedGroups = groupedModels.keys.associateWith { false }
+                 }
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -261,52 +289,73 @@ fun ModelListDialog(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         groupedModels.forEach { (group, models) ->
+                            val isExpanded = expandedGroups[group] == true
+                            
                             item(key = "header_$group") {
                                 Surface(
                                     color = MaterialTheme.colorScheme.secondaryContainer,
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .clickable { 
+                                            expandedGroups = expandedGroups.toMutableMap().apply {
+                                                put(group, !isExpanded)
+                                            }
+                                        }
                                 ) {
-                                    Text(
-                                        text = group,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                            contentDescription = if (isExpanded) "Collapse" else "Expand",
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "$group (${models.size})",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
                                 }
                             }
                             
-                            items(models, key = { it.modelId }) { model ->
-                                val isSelected = model.modelId == activeModelId
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onSelect(model.modelId) }
-                                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
-                                        .padding(vertical = 8.dp, horizontal = 8.dp)
-                                ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { onSelect(model.modelId) },
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = model.displayName.ifBlank { model.modelId },
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            if (isExpanded) {
+                                items(models, key = { it.modelId }) { model ->
+                                    val isSelected = model.modelId == activeModelId
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onSelect(model.modelId) }
+                                            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f) else Color.Transparent)
+                                            .padding(vertical = 8.dp, horizontal = 8.dp)
+                                    ) {
+                                        RadioButton(
+                                            selected = isSelected,
+                                            onClick = { onSelect(model.modelId) },
+                                            modifier = Modifier.size(24.dp)
                                         )
-                                        if (model.displayName.isNotBlank() && model.displayName != model.modelId) {
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
                                             Text(
-                                                text = model.modelId,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                text = model.displayName.ifBlank { model.modelId },
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                             )
+                                            if (model.displayName.isNotBlank() && model.displayName != model.modelId) {
+                                                Text(
+                                                    text = model.modelId,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
+                                    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 }
-                                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             }
                         }
                     }

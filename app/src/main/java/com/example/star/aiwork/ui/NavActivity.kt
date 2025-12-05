@@ -142,7 +142,7 @@ class NavActivity : AppCompatActivity() {
                         drawerState = drawerState,
                         selectedMenu = currentSession?.id ?: "",
                         agents = agents,
-                        getSessions = { chatViewModel.getSessionsList() },
+                        sessions = sessions,
                         knownKnowledgeBases = knownKnowledgeBases,
                         isRagEnabled = isRagEnabled,
                         onChatClicked = { sessionId ->

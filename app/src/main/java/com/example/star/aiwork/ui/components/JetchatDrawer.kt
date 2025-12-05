@@ -21,8 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -33,8 +31,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -57,13 +57,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.Alignment.Companion.CenterStart
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
@@ -91,19 +88,19 @@ fun JetchatDrawer(
     drawerState: DrawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
     onChatClicked: (String) -> Unit,
     onProfileClicked: (String) -> Unit,
-    onAgentClicked: (Agent) -> Unit = {},
-    onAgentDelete: (Agent) -> Unit = {},
-    onPromptMarketClicked: () -> Unit = {},
-    onImportPdfClicked: () -> Unit = {},
-    onDeleteKnowledgeBase: (String) -> Unit = {},
-    onNewChatClicked: () -> Unit = {},
-    onRenameSession: (String) -> Unit = {},
-    onArchiveSession: (String) -> Unit = {},
-    onPinSession: (String) -> Unit = {},
-    onDeleteSession: (String) -> Unit = {},
-    onRagEnabledChanged: (Boolean) -> Unit = {},
+    onAgentClicked: (Agent) -> Unit = { },
+    onAgentDelete: (Agent) -> Unit = { },
+    onPromptMarketClicked: () -> Unit = { },
+    onImportPdfClicked: () -> Unit = { },
+    onDeleteKnowledgeBase: (String) -> Unit = { },
+    onNewChatClicked: () -> Unit = { },
+    onRenameSession: (String) -> Unit = { },
+    onArchiveSession: (String) -> Unit = { },
+    onPinSession: (String) -> Unit = { },
+    onDeleteSession: (String) -> Unit = { },
+    onRagEnabledChanged: (Boolean) -> Unit = { },
     agents: List<Agent> = emptyList(),
-    getSessions: suspend () -> List<SessionEntity> = { emptyList() },
+    sessions: List<SessionEntity> = emptyList(),
     knownKnowledgeBases: List<String> = emptyList(),
     isRagEnabled: Boolean = true,
     selectedMenu: String = "",
@@ -115,7 +112,6 @@ fun JetchatDrawer(
             drawerContent = {
                 ModalDrawerSheet {
                     JetchatDrawerContent(
-                        drawerState = drawerState,
                         onProfileClicked = onProfileClicked,
                         onChatClicked = onChatClicked,
                         onAgentClicked = onAgentClicked,
@@ -130,7 +126,7 @@ fun JetchatDrawer(
                         onDeleteSession = onDeleteSession,
                         onRagEnabledChanged = onRagEnabledChanged,
                         agents = agents,
-                        getSessions = getSessions,
+                        sessions = sessions,
                         knownKnowledgeBases = knownKnowledgeBases,
                         isRagEnabled = isRagEnabled,
                         selectedMenu = selectedMenu
@@ -160,9 +156,8 @@ fun JetchatDrawer(
  */
 @Composable
 fun JetchatDrawerContent(
-    drawerState: DrawerState,
-    onProfileClicked: (String) -> Unit, 
-    onChatClicked: (String) -> Unit, 
+    onProfileClicked: (String) -> Unit,
+    onChatClicked: (String) -> Unit,
     onAgentClicked: (Agent) -> Unit,
     onAgentDelete: (Agent) -> Unit,
     onPromptMarketClicked: () -> Unit,
@@ -175,7 +170,7 @@ fun JetchatDrawerContent(
     onDeleteSession: (String) -> Unit,
     onRagEnabledChanged: (Boolean) -> Unit,
     agents: List<Agent>,
-    getSessions: suspend () -> List<SessionEntity>,
+    sessions: List<SessionEntity>,
     knownKnowledgeBases: List<String>,
     isRagEnabled: Boolean,
     selectedMenu: String
@@ -186,19 +181,6 @@ fun JetchatDrawerContent(
     val scrollState = rememberScrollState()
     var isAgentsExpanded by remember { mutableStateOf(false) }
     var isKnowledgeExpanded by remember { mutableStateOf(false) }
-    
-    // Drawer 自己维护的会话列表，只在打开时更新
-    var sessions by remember { mutableStateOf<List<SessionEntity>>(emptyList()) }
-    
-    // 监听 drawer 打开状态，打开时更新会话列表
-    LaunchedEffect(Unit) {
-        snapshotFlow { drawerState.currentValue }
-            .filter { it == DrawerValue.Open }
-            .collect {
-                // Drawer 已经打开，更新会话列表
-                sessions = getSessions()
-            }
-    }
 
     Column(
         modifier = Modifier.verticalScroll(scrollState)
@@ -210,10 +192,12 @@ fun JetchatDrawerContent(
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("角色市场")
         MarketItem(onPromptMarketClicked)
-        
+
         if (agents.isNotEmpty()) {
-             CollapsibleDrawerItemHeader("我的智能体", isAgentsExpanded) { isAgentsExpanded = !isAgentsExpanded }
-             if (isAgentsExpanded) {
+            CollapsibleDrawerItemHeader("我的智能体", isAgentsExpanded) {
+                isAgentsExpanded = !isAgentsExpanded
+            }
+            if (isAgentsExpanded) {
                 agents.forEach { agent ->
                     AgentItem(
                         agent = agent,
@@ -222,26 +206,28 @@ fun JetchatDrawerContent(
                         onAgentDelete = { onAgentDelete(agent) }
                     )
                 }
-             }
+            }
         }
 
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("知识库")
-        
+
         RagSwitchItem(
             checked = isRagEnabled,
             onCheckedChange = onRagEnabledChanged
         )
-        
+
         KnowledgeItem(
             "PDF 导入",
             false
         ) {
             onImportPdfClicked()
         }
-        
+
         if (knownKnowledgeBases.isNotEmpty()) {
-            CollapsibleDrawerItemHeader("已导入知识库", isKnowledgeExpanded) { isKnowledgeExpanded = !isKnowledgeExpanded }
+            CollapsibleDrawerItemHeader("已导入知识库", isKnowledgeExpanded) {
+                isKnowledgeExpanded = !isKnowledgeExpanded
+            }
             if (isKnowledgeExpanded) {
                 knownKnowledgeBases.forEach { filename ->
                     KnowledgeBaseItem(
@@ -273,7 +259,7 @@ fun JetchatDrawerContent(
                 .sortedByDescending { it.updatedAt } // 非置顶会话按更新时间降序排序
             Pair(pinned, unpinned)
         }
-        
+
         // 显示置顶会话区域（在 Chats 区域上方）
         if (pinnedSessions.isNotEmpty()) {
             DrawerItemHeader("置顶的聊天")
@@ -290,12 +276,12 @@ fun JetchatDrawerContent(
                 )
             }
         }
-        
+
         // 如果有置顶会话且也有非置顶会话，在它们之间添加一条横线（填满整个 drawer）
         if (pinnedSessions.isNotEmpty() && unpinnedSessions.isNotEmpty()) {
             DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         }
-        
+
         // 显示非置顶会话区域
         if (unpinnedSessions.isNotEmpty()) {
             DrawerItemHeader("聊天")
@@ -499,7 +485,7 @@ private fun ChatItem(
                 .padding(start = 16.dp)
                 .weight(1f),
         )
-        
+
         ChatItemMenu(
             onMenuActionSelected = { action ->
                 when (action) {
@@ -549,11 +535,12 @@ private fun AgentItem(
             modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp),
             contentDescription = null,
         )
-        Column(modifier = Modifier
-            .padding(start = 12.dp)
-            .weight(1f)
+        Column(
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .weight(1f)
         ) {
-             Text(
+            Text(
                 text = agent.name,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (selected) {
@@ -569,7 +556,7 @@ private fun AgentItem(
                 maxLines = 1
             )
         }
-        
+
         if (!agent.isDefault) {
             IconButton(onClick = onAgentDelete) {
                 Icon(
@@ -610,14 +597,14 @@ private fun SettingsItem(text: String, selected: Boolean = false, onProfileClick
         val paddingSizeModifier = Modifier
             .padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
             .size(24.dp)
-        
+
         Icon(
             imageVector = Icons.Default.Settings,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = paddingSizeModifier,
             contentDescription = null
         )
-        
+
         Text(
             text,
             style = MaterialTheme.typography.bodyMedium,
@@ -682,7 +669,7 @@ private fun KnowledgeBaseItem(
             modifier = Modifier.size(20.dp),
             contentDescription = null,
         )
-        
+
         Text(
             text = filename,
             style = MaterialTheme.typography.bodyMedium,
@@ -692,7 +679,7 @@ private fun KnowledgeBaseItem(
                 .weight(1f),
             maxLines = 1
         )
-        
+
         IconButton(
             onClick = onDelete,
             modifier = Modifier.size(32.dp)
@@ -725,15 +712,15 @@ private fun RagSwitchItem(
             val paddingSizeModifier = Modifier
                 .padding(start = 16.dp, top = 16.dp, bottom = 16.dp)
                 .size(24.dp)
-            
+
             // 使用一个代表知识库/数据库的图标，或者复用 Description
             Icon(
-                imageVector = Icons.Default.Description, 
+                imageVector = Icons.Default.Description,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = paddingSizeModifier,
                 contentDescription = null
             )
-            
+
             Text(
                 "启用知识库 (RAG)",
                 style = MaterialTheme.typography.bodyMedium,
@@ -741,7 +728,7 @@ private fun RagSwitchItem(
                 modifier = Modifier.padding(start = 12.dp),
             )
         }
-        
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -769,10 +756,8 @@ fun DividerItem(modifier: Modifier = Modifier) {
 fun DrawerPreview() {
     JetchatTheme {
         Surface {
-            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             Column {
                 JetchatDrawerContent(
-                    drawerState = drawerState,
                     onProfileClicked = {},
                     onChatClicked = {},
                     onAgentClicked = {},
@@ -787,7 +772,7 @@ fun DrawerPreview() {
                     onDeleteSession = {},
                     onRagEnabledChanged = {},
                     agents = emptyList(),
-                    getSessions = { emptyList() },
+                    sessions = emptyList(),
                     knownKnowledgeBases = listOf("doc1.pdf", "report_final.pdf"),
                     isRagEnabled = true,
                     selectedMenu = ""
@@ -805,10 +790,8 @@ fun DrawerPreview() {
 fun DrawerPreviewDark() {
     JetchatTheme(isDarkTheme = true) {
         Surface {
-            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             Column {
                 JetchatDrawerContent(
-                    drawerState = drawerState,
                     onProfileClicked = {},
                     onChatClicked = {},
                     onAgentClicked = {},
@@ -823,7 +806,7 @@ fun DrawerPreviewDark() {
                     onDeleteSession = {},
                     onRagEnabledChanged = {},
                     agents = emptyList(),
-                    getSessions = { emptyList() },
+                    sessions = emptyList(),
                     knownKnowledgeBases = listOf("doc1.pdf", "report_final.pdf"),
                     isRagEnabled = true,
                     selectedMenu = ""

@@ -126,6 +126,36 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
+
+    /**
+     * 兜底 Provider ID。
+     */
+    val fallbackProviderId: StateFlow<String?> = userPreferencesRepository.fallbackProviderId
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    /**
+     * 兜底 Model ID。
+     */
+    val fallbackModelId: StateFlow<String?> = userPreferencesRepository.fallbackModelId
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    /**
+     * 兜底机制启用状态。
+     */
+    val isFallbackEnabled: StateFlow<Boolean> = userPreferencesRepository.isFallbackEnabled
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
         
     val knownKnowledgeBases: StateFlow<List<String>> = ragService.knownFiles
         .stateIn(
@@ -233,6 +263,25 @@ class MainViewModel(
                 }
                 userPreferencesRepository.updateProviderSettings(newSettings)
             }
+        }
+    }
+    
+    /**
+     * 更新兜底模型设置。
+     */
+    fun updateFallbackModel(providerId: String?, modelId: String?) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateFallbackProviderId(providerId)
+            userPreferencesRepository.updateFallbackModelId(modelId)
+        }
+    }
+
+    /**
+     * 更新兜底机制启用状态。
+     */
+    fun updateFallbackEnabled(isEnabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.updateFallbackEnabled(isEnabled)
         }
     }
     
