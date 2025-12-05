@@ -4,6 +4,7 @@ import com.example.star.aiwork.data.local.datasource.MessageLocalDataSource
 import com.example.star.aiwork.data.local.datasource.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.MessageEntity
 
+@Deprecated("Use usecase/SendMessage instead")
 class SendMessageUseCase(
     private val messageDataSource: MessageLocalDataSource,
     private val sessionDataSource: SessionLocalDataSource

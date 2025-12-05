@@ -459,6 +459,7 @@ fun ConversationPreview() {
             pauseStreamingUseCase = pauseStreamingUseCase,
             rollbackMessageUseCase = rollbackMessageUseCase,
             imageGenerationUseCase = imageGenerationUseCase, // Fix: Pass imageGenerationUseCase
+            generateChatNameUseCase = null, // Preview doesn't need chat name generation
             sessionId = "123",
             getProviderSettings = { emptyList() },
             persistenceGateway = persistenceGateway,

@@ -47,6 +47,7 @@ import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
 import com.example.star.aiwork.data.local.datasource.MessageLocalDataSourceImpl
 import com.example.star.aiwork.data.local.datasource.SessionLocalDataSourceImpl
+import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
@@ -122,6 +123,9 @@ class ConversationFragment : Fragment() {
                 val imageGenerationUseCase = remember(aiRepository) {
                     ImageGenerationUseCase(aiRepository)
                 }
+                val generateChatNameUseCase = remember(aiRepository) {
+                    GenerateChatNameUseCase(aiRepository)
+                }
 
                 val conversationLogic = remember(
                     currentSession?.id,
@@ -138,6 +142,7 @@ class ConversationFragment : Fragment() {
                         pauseStreamingUseCase = pauseStreamingUseCase,
                         rollbackMessageUseCase = rollbackMessageUseCase,
                         imageGenerationUseCase = imageGenerationUseCase,
+                        generateChatNameUseCase = generateChatNameUseCase,
                         sessionId = currentSession?.id ?: UUID.randomUUID().toString(),
                         getProviderSettings = { providerSettings },
                         persistenceGateway = messagePersistenceGateway,
