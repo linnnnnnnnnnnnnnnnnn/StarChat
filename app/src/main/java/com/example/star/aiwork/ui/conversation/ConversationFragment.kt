@@ -290,7 +290,7 @@ class ConversationFragment : Fragment() {
             author = author,
             content = entity.content,
             timestamp = timestamp,
-            imageUrl = entity.metadata.remoteUrl
+            imageUrl = entity.metadata.localFilePath
         )
     }
 }

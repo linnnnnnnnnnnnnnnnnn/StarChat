@@ -187,13 +187,15 @@ class MessagePersistenceGatewayImpl(
             else -> MessageStatus.DONE
         }
 
+        val metadata = MessageMetadata(localFilePath = chatDataItem.localFilePath)
+
         return MessageEntity(
             id = UUID.randomUUID().toString(),
             sessionId = sessionId,
             role = role,
             type = type,
             content = chatDataItem.content,
-            metadata = MessageMetadata(),
+            metadata = metadata,
             parentMessageId = null,
             createdAt = System.currentTimeMillis(),
             status = status

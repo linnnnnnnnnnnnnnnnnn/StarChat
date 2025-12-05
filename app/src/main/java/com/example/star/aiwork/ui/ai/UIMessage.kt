@@ -80,12 +80,14 @@ data class UIMessage(
                                 if (part is UIMessagePart.Image) {
                                     UIMessagePart.Image(
                                         url = existingImagePart.url + deltaPart.url,
+                                        originalUri = existingImagePart.originalUri
                                     )
                                 } else part
                             }
                         } else {
                             acc + UIMessagePart.Image(
                                 url = "data:image/png;base64,${deltaPart.url}",
+                                originalUri = deltaPart.originalUri
                             )
                         }
                     }
@@ -395,6 +397,7 @@ sealed class UIMessagePart {
     @Serializable
     data class Image(
         val url: String,
+        val originalUri: String? = null,
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
         override val priority: Int = 1
