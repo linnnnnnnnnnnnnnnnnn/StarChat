@@ -112,6 +112,14 @@ class ConversationUiState(
     }
 
     /**
+     * 清空所有消息。
+     * 用于在会话切换时清理不属于当前会话的消息。
+     */
+    fun clearMessages() {
+        _messages.clear()
+    }
+
+    /**
      * 将内容追加到最新一条消息中。
      * 通常用于流式显示 AI 的回复。
      */
