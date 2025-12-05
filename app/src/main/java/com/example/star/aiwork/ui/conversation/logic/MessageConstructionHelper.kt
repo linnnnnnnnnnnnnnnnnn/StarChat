@@ -1,7 +1,15 @@
 package com.example.star.aiwork.ui.conversation.logic
 
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.util.Log
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import coil.size.Size
 import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
@@ -9,7 +17,7 @@ import com.example.star.aiwork.infra.util.toBase64
 import com.example.star.aiwork.ui.ai.UIMessage
 import com.example.star.aiwork.ui.ai.UIMessagePart
 import com.example.star.aiwork.ui.conversation.ConversationUiState
-import com.example.star.aiwork.ui.conversation.Message
+import java.io.ByteArrayOutputStream
 
 object MessageConstructionHelper {
 
@@ -28,27 +36,23 @@ object MessageConstructionHelper {
             inputContent,
             isAutoTriggered,
             activeAgent,
-            null, // We handle knowledge retrieval result separately if needed, or pass context here.
-                  // But based on original logic, retrieval happens inside construct logic or before.
-                  // Let's adapt: Original logic did retrieval inside processMessage.
-                  // To keep this helper synchronous or suspend, let's assume the knowledge is already retrieved or we pass the function.
+            null,
             retrieveKnowledge,
             context
         )
     }
-    
+
     suspend fun constructMessages(
         uiState: ConversationUiState,
         authorMe: String,
         inputContent: String,
         isAutoTriggered: Boolean,
         activeAgent: Agent?,
-        knowledgeContext: String? = null, // If passed directly
-        retrieveKnowledge: (suspend (String) -> String)? = null, // Or function to retrieve
+        knowledgeContext: String? = null,
+        retrieveKnowledge: (suspend (String) -> String)? = null,
         context: Context
     ): List<UIMessage> {
 
-        // RAG Retrieval
         val finalKnowledgeContext = knowledgeContext ?: if (!isAutoTriggered && retrieveKnowledge != null) {
             retrieveKnowledge(inputContent)
         } else {
@@ -86,25 +90,16 @@ object MessageConstructionHelper {
 
         val messagesToSend = mutableListOf<UIMessage>()
 
-        if (activeAgent != null && activeAgent.systemPrompt.isNotEmpty()) {
-            messagesToSend.add(UIMessage(
-                role = MessageRole.SYSTEM,
-                parts = listOf(UIMessagePart.Text(activeAgent.systemPrompt))
-            ))
+        activeAgent?.systemPrompt?.takeIf { it.isNotEmpty() }?.let {
+            messagesToSend.add(UIMessage(role = MessageRole.SYSTEM, parts = listOf(UIMessagePart.Text(it))))
         }
 
-        if (activeAgent != null) {
-            activeAgent.presetMessages.forEach { preset ->
-                messagesToSend.add(UIMessage(
-                    role = preset.role,
-                    parts = listOf(UIMessagePart.Text(preset.content))
-                ))
-            }
+        activeAgent?.presetMessages?.forEach { preset ->
+            messagesToSend.add(UIMessage(role = preset.role, parts = listOf(UIMessagePart.Text(preset.content))))
         }
 
         messagesToSend.addAll(contextMessages)
 
-        // Remove duplication if last message in history is the current user input (raw)
         if (messagesToSend.isNotEmpty() && messagesToSend.last().role == MessageRole.USER) {
             messagesToSend.removeAt(messagesToSend.lastIndex)
         }
@@ -117,15 +112,30 @@ object MessageConstructionHelper {
             if (lastUserMsg?.imageUrl != null) {
                 try {
                     val imageUri = Uri.parse(lastUserMsg.imageUrl)
-                    val base64Image = context.contentResolver.openInputStream(imageUri)?.use { inputStream ->
-                        inputStream.readBytes().toBase64()
+
+                    // --- FIX: Take persistable URI permission to access the image after app restart ---
+                    try {
+                        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        context.contentResolver.takePersistableUriPermission(imageUri, flags)
+                    } catch (e: SecurityException) {
+                        Log.e("MessageConstruction", "Failed to take persistable URI permission for $imageUri", e)
+                        // This might happen if the URI provider doesn't support persistable permissions.
+                        // The image will likely fail to load on next app launch.
                     }
+                    // --- END FIX ---
+                    
+                    // Use the new helper to get a scaled-down Base64 string
+                    val base64Image = createScaledBase64Image(context, imageUri)
+
                     if (base64Image != null) {
                         val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
-                        currentMessageParts.add(UIMessagePart.Image(url = "data:$mimeType;base64,$base64Image"))
+                        currentMessageParts.add(UIMessagePart.Image(
+                            url = "data:$mimeType;base64,$base64Image",
+                            originalUri = imageUri.toString()
+                        ))
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                } catch (t: Throwable) {
+                    Log.e("MessageConstruction", "Failed to process and scale image URI: ${lastUserMsg.imageUrl}", t)
                 }
             }
         }
@@ -138,18 +148,56 @@ object MessageConstructionHelper {
         return messagesToSend
     }
 
+    /**
+     * Converts a UIMessage to a ChatDataItem for database persistence.
+     */
     fun toChatDataItem(message: UIMessage): ChatDataItem {
         val builder = StringBuilder()
+        var localFilePath: String? = null
+
         message.parts.forEach { part ->
             when (part) {
                 is UIMessagePart.Text -> builder.append(part.text)
-                is UIMessagePart.Image -> builder.append("\n[image:${part.url}]")
+                is UIMessagePart.Image -> {
+                    // IMPORTANT: Only append a placeholder for the content.
+                    // The actual image path is stored in localFilePath.
+                    if (builder.isNotEmpty()) builder.append(" ")
+                    builder.append("[image]")
+                    localFilePath = part.originalUri
+                }
                 else -> {}
             }
         }
         return ChatDataItem(
             role = message.role.name.lowercase(),
-            content = builder.toString()
+            content = builder.toString().trim(),
+            localFilePath = localFilePath
         )
+    }
+
+    /**
+     * Loads an image from a URI, scales it down, and converts it to a Base64 string.
+     * This prevents OutOfMemoryErrors and reduces payload size for the AI model.
+     */
+    private suspend fun createScaledBase64Image(context: Context, imageUri: Uri): String? {
+        val imageLoader = ImageLoader(context)
+        val request = ImageRequest.Builder(context)
+            .data(imageUri)
+            // Scale the image to a max size of 800x800 pixels.
+            .size(Size(800, 800))
+            .allowHardware(false) // Required for easy conversion to software bitmap.
+            .build()
+
+        val result = imageLoader.execute(request)
+
+        if (result is SuccessResult) {
+            val bitmap = (result.drawable as BitmapDrawable).bitmap
+            ByteArrayOutputStream().use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+                val byteArray = outputStream.toByteArray()
+                return byteArray.toBase64()
+            }
+        }
+        return null
     }
 }
