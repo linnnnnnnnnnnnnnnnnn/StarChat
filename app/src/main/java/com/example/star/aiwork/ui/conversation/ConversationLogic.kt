@@ -31,7 +31,7 @@ import java.util.UUID
 
 /**
  * Handles the business logic for processing messages in the conversation.
- * Includes sending messages to AI providers, handling fallbacks, and auto-looping agents.
+ * Includes sending messages to AI providers, handling fallbacks, and autolooping agents.
  * 
  * Refactored to delegate responsibilities to smaller handlers:
  * - ImageGenerationHandler
@@ -302,7 +302,7 @@ class ConversationLogic(
                 }
 
             } catch (e: Exception) {
-                handleError(e, inputContent, providerSetting, isAutoTriggered, loopCount, retrieveKnowledge)
+                handleError(e, inputContent, providerSetting, model, isAutoTriggered, loopCount, retrieveKnowledge, isRetry)
             }
         } else {
              uiState.addMessage(
@@ -316,11 +316,16 @@ class ConversationLogic(
         e: Exception,
         inputContent: String,
         providerSetting: ProviderSetting?,
+        model: Model?,
         isAutoTriggered: Boolean,
         loopCount: Int,
-        retrieveKnowledge: suspend (String) -> String
+        retrieveKnowledge: suspend (String) -> String,
+        isRetry: Boolean
     ) {
+        Log.e("ConversationLogic", "❌ handleError triggered: ${e.javaClass.simpleName} - ${e.message}", e)
+
         if (e is CancellationException || isCancellationRelatedException(e)) {
+            Log.d("ConversationLogic", "⚠️ Error is cancellation related, ignoring.")
             withContext(Dispatchers.Main) {
                 uiState.isGenerating = false
                 uiState.updateLastMessageLoadingState(false)
@@ -328,33 +333,89 @@ class ConversationLogic(
             return
         }
 
+        Log.d("ConversationLogic", "🔍 Checking fallback eligibility: isRetry=$isRetry, enabled=${uiState.isFallbackEnabled}")
+
         // Fallback logic
-        val isCurrentOllama = providerSetting is ProviderSetting.Ollama
-        if (!isCurrentOllama) {
-            val ollamaProvider = getProviderSettings().find { it is ProviderSetting.Ollama }
-            if (ollamaProvider != null && ollamaProvider.models.isNotEmpty()) {
+        if (!isRetry && // 仅在尚未重试过的情况下尝试兜底
+            uiState.isFallbackEnabled &&
+            uiState.fallbackProviderId != null &&
+            uiState.fallbackModelId != null
+        ) {
+            Log.d("ConversationLogic", "🔍 Fallback config found: providerId=${uiState.fallbackProviderId}, modelId=${uiState.fallbackModelId}")
+            
+            val providers = getProviderSettings()
+            val fallbackProvider = providers.find { it.id == uiState.fallbackProviderId }
+            val fallbackModel = fallbackProvider?.models?.find { it.id == uiState.fallbackModelId }
+                ?: fallbackProvider?.models?.find { it.modelId == uiState.fallbackModelId }
+
+            // 避免在当前已经是兜底配置的情况下陷入死循环（虽然!isRetry已经能大部分避免，但双重保险更好）
+            val isSameAsCurrent = providerSetting?.id == uiState.fallbackProviderId && 
+                (model?.id == fallbackModel?.id)
+
+            Log.d("ConversationLogic", "🔍 Fallback candidates: provider=${fallbackProvider?.name}, model=${fallbackModel?.displayName}")
+            Log.d("ConversationLogic", "🔍 isSameAsCurrent=$isSameAsCurrent (currentProvider=${providerSetting?.id}, currentModel=${model?.id})")
+
+            if (fallbackProvider != null && fallbackModel != null && !isSameAsCurrent) {
+                Log.i("ConversationLogic", "✅ Triggering configured fallback to ${fallbackProvider.name}...")
                 withContext(Dispatchers.Main) {
                     uiState.updateLastMessageLoadingState(false)
                     uiState.addMessage(
-                        Message("System", "Request failed (${e.message}). Fallback to local Ollama...", timeNow)
+                        Message("System", "Request failed (${e.message}). Fallback to ${fallbackProvider.name} (${fallbackModel.displayName})...", timeNow)
                     )
                 }
                 processMessage(
                     inputContent = inputContent,
-                    providerSetting = ollamaProvider,
-                    model = ollamaProvider.models.first(),
+                    providerSetting = fallbackProvider,
+                    model = fallbackModel,
                     isAutoTriggered = isAutoTriggered,
                     loopCount = loopCount,
                     retrieveKnowledge = retrieveKnowledge,
                     isRetry = true
                 )
                 return
+            } else {
+                Log.w("ConversationLogic", "⚠️ Fallback skipped: Provider/Model not found or same as current.")
             }
+        } else if (!isRetry) {
+            Log.d("ConversationLogic", "🔍 Checking default Ollama fallback...")
+            // 尝试默认的 Ollama 兜底，如果用户没有配置特定兜底模型，但有本地模型可用
+            // 且当前不是 Ollama
+            val isCurrentOllama = providerSetting is ProviderSetting.Ollama
+            if (!isCurrentOllama) {
+                val ollamaProvider = getProviderSettings().find { it is ProviderSetting.Ollama }
+                if (ollamaProvider != null && ollamaProvider.models.isNotEmpty()) {
+                    Log.i("ConversationLogic", "✅ Triggering default Ollama fallback...")
+                    withContext(Dispatchers.Main) {
+                        uiState.updateLastMessageLoadingState(false)
+                        uiState.addMessage(
+                            Message("System", "Request failed (${e.message}). Fallback to local Ollama...", timeNow)
+                        )
+                    }
+                    processMessage(
+                        inputContent = inputContent,
+                        providerSetting = ollamaProvider,
+                        model = ollamaProvider.models.first(),
+                        isAutoTriggered = isAutoTriggered,
+                        loopCount = loopCount,
+                        retrieveKnowledge = retrieveKnowledge,
+                        isRetry = true
+                    )
+                    return
+                } else {
+                     Log.d("ConversationLogic", "⚠️ No Ollama provider found or it has no models.")
+                }
+            } else {
+                Log.d("ConversationLogic", "⚠️ Current provider is already Ollama.")
+            }
+        } else {
+            Log.d("ConversationLogic", "Skipping configured fallback (retry or disabled or missing config).")
         }
 
+        Log.e("ConversationLogic", "❌ No fallback triggered. Displaying error message.")
         withContext(Dispatchers.Main) {
             uiState.updateLastMessageLoadingState(false)
             uiState.isGenerating = false
+            // 如果是重试产生的空消息（或第一次尝试），且内容为空，移除它
             if (uiState.messages.isNotEmpty() && 
                 uiState.messages[0].author == "AI" && 
                 uiState.messages[0].content.isBlank()) {
@@ -365,8 +426,6 @@ class ConversationLogic(
             uiState.addMessage(
                 Message("System", errorMessage, timeNow)
             )
-            uiState.isGenerating = false
-            uiState.updateLastMessageLoadingState(false)
         }
         e.printStackTrace()
     }

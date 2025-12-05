@@ -45,8 +45,10 @@ class StreamingResponseHandler(
         var lastUpdateTime = 0L
         val UPDATE_INTERVAL_MS = 500L
         var hasShownSlowLoadingHint = false
-        var hasErrorOccurred = false
         var hintTypingJob: Job? = null
+
+        // Variable to capture exception to throw later
+        var capturedException: Throwable? = null
 
         val streamingJob = scope.launch {
             try {
@@ -95,20 +97,14 @@ class StreamingResponseHandler(
                 }
             } catch (streamError: CancellationException) {
                 if (!isCancelledCheck()) {
-                    hasErrorOccurred = true
                     logThrowableChain("StreamingHandler", "streamError during collect (cancelled)", streamError)
-                    val errorMessage = formatErrorMessage(streamError as? Exception ?: Exception(streamError.message, streamError))
-                    withContext(Dispatchers.Main) {
-                        handleErrorState(errorMessage, fullResponse)
-                    }
+                    // Wrap unexpected cancellation so it triggers error handling upstream
+                    capturedException = RuntimeException("Unexpected cancellation", streamError)
                 }
             } catch (streamError: Exception) {
-                hasErrorOccurred = true
                 logThrowableChain("StreamingHandler", "streamError during collect", streamError)
-                val errorMessage = formatErrorMessage(streamError as? Exception ?: Exception(streamError.message, streamError))
-                withContext(Dispatchers.Main) {
-                    handleErrorState(errorMessage, fullResponse)
-                }
+                // Capture the exception and throw it later to let ConversationLogic handle fallback
+                capturedException = streamError
             }
         }
 
@@ -124,8 +120,9 @@ class StreamingResponseHandler(
 
         hintTypingJob?.join()
 
-        if (hasErrorOccurred) {
-            return "" // Or throw, depending on how we want to handle flow control
+        // If an exception occurred during streaming, throw it now so ConversationLogic can handle fallback
+        if (capturedException != null) {
+            throw capturedException!!
         }
 
         withContext(Dispatchers.Main) {
@@ -150,21 +147,7 @@ class StreamingResponseHandler(
         return if (isCancelledCheck()) "" else fullResponse
     }
 
-    private suspend fun handleErrorState(errorMessage: String, fullResponse: String) {
-        uiState.updateLastMessageLoadingState(false)
-        uiState.isGenerating = false
-
-        if (fullResponse.isEmpty()) {
-            if (uiState.messages.isNotEmpty() &&
-                uiState.messages[0].author == "AI" &&
-                uiState.messages[0].content.isBlank()
-            ) {
-                uiState.removeFirstMessage()
-            }
-        }
-        uiState.addMessage(Message("System", errorMessage, timeNow))
-    }
-
+    // Helper methods for char typing effect
     private fun Flow<String>.asCharTypingStream(charDelayMs: Long = 30L): Flow<String> = flow {
         collect { chunk ->
             if (chunk.isEmpty()) return@collect

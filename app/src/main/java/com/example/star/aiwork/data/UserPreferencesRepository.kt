@@ -61,6 +61,9 @@ class UserPreferencesRepository(private val context: Context) {
         val STREAM_RESPONSE = booleanPreferencesKey("stream_response")
         val ACTIVE_PROVIDER_ID = stringPreferencesKey("active_provider_id")
         val ACTIVE_MODEL_ID = stringPreferencesKey("active_model_id")
+        val FALLBACK_PROVIDER_ID = stringPreferencesKey("fallback_provider_id")
+        val FALLBACK_MODEL_ID = stringPreferencesKey("fallback_model_id")
+        val IS_FALLBACK_ENABLED = booleanPreferencesKey("is_fallback_enabled")
         val IS_RAG_ENABLED = booleanPreferencesKey("is_rag_enabled")
     }
 
@@ -180,6 +183,65 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateActiveModelId(id: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.ACTIVE_MODEL_ID] = id
+        }
+    }
+
+    /**
+     * 兜底 Provider ID 流。
+     */
+    val fallbackProviderId: Flow<String?> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.FALLBACK_PROVIDER_ID]
+        }
+
+    /**
+     * 更新兜底 Provider ID。
+     */
+    suspend fun updateFallbackProviderId(id: String?) {
+        context.dataStore.edit { preferences ->
+            if (id == null) {
+                preferences.remove(PreferencesKeys.FALLBACK_PROVIDER_ID)
+            } else {
+                preferences[PreferencesKeys.FALLBACK_PROVIDER_ID] = id
+            }
+        }
+    }
+
+    /**
+     * 兜底 Model ID 流。
+     */
+    val fallbackModelId: Flow<String?> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.FALLBACK_MODEL_ID]
+        }
+
+    /**
+     * 更新兜底 Model ID。
+     */
+    suspend fun updateFallbackModelId(id: String?) {
+        context.dataStore.edit { preferences ->
+             if (id == null) {
+                preferences.remove(PreferencesKeys.FALLBACK_MODEL_ID)
+            } else {
+                preferences[PreferencesKeys.FALLBACK_MODEL_ID] = id
+            }
+        }
+    }
+
+    /**
+     * 兜底机制启用状态流。
+     */
+    val isFallbackEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.IS_FALLBACK_ENABLED] ?: true
+        }
+
+    /**
+     * 更新兜底机制启用状态。
+     */
+    suspend fun updateFallbackEnabled(isEnabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.IS_FALLBACK_ENABLED] = isEnabled
         }
     }
 

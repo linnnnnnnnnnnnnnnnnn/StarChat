@@ -72,6 +72,11 @@ class ConversationFragment : Fragment() {
                 val streamResponse by activityViewModel.streamResponse.collectAsStateWithLifecycle()
                 val activeProviderId by activityViewModel.activeProviderId.collectAsStateWithLifecycle()
                 val activeModelId by activityViewModel.activeModelId.collectAsStateWithLifecycle()
+                
+                // 收集兜底设置
+                val isFallbackEnabled by activityViewModel.isFallbackEnabled.collectAsStateWithLifecycle()
+                val fallbackProviderId by activityViewModel.fallbackProviderId.collectAsStateWithLifecycle()
+                val fallbackModelId by activityViewModel.fallbackModelId.collectAsStateWithLifecycle()
 
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
@@ -215,10 +220,17 @@ class ConversationFragment : Fragment() {
                         temperature = temperature,
                         maxTokens = maxTokens,
                         streamResponse = streamResponse,
+                        isFallbackEnabled = isFallbackEnabled,
+                        fallbackProviderId = fallbackProviderId,
+                        fallbackModelId = fallbackModelId,
                         onUpdateSettings = { temp, tokens, stream ->
                             activityViewModel.updateTemperature(temp)
                             activityViewModel.updateMaxTokens(tokens)
                             activityViewModel.updateStreamResponse(stream)
+                        },
+                        onUpdateFallbackSettings = { enabled, pId, mId ->
+                            activityViewModel.updateFallbackEnabled(enabled)
+                            activityViewModel.updateFallbackModel(pId, mId)
                         },
                         retrieveKnowledge = { query ->
                             activityViewModel.retrieveKnowledge(query)
