@@ -168,22 +168,35 @@ class ConversationFragment : Fragment() {
                     }
                 }
 
-                // 只在会话切换时，从数据库同步消息到 UI 状态
-                // 注意：不在消息内容变化时同步，以避免清空临时的加载占位消息
+                // 只在会话切换时，从数据库同步消息到 UI 状态（仅在 uiState 中没有消息时）
+                // uiState 是从缓存中获取的，如果它已经包含消息（之前加载过），则直接使用
+                // 只有当 uiState.messages 为空时（新会话或首次加载），才从数据库加载
+                // 这样可以保留正在流式生成的消息（临时状态），避免不必要的清空和重新加载
                 LaunchedEffect(currentSession?.id) {
                     currentSession?.let { session ->
                         // 使用同一个 uiState 实例，确保一致性
                         // uiState 是从缓存中获取的，所以 isGenerating、isRecording、textFieldValue 等
                         // 会话级别的状态字段会自动从缓存中恢复，不需要重置
                         
-                        // 清空现有消息
-                        while (uiState.messages.isNotEmpty()) {
-                            uiState.removeFirstMessage()
+                        // 只有当 uiState 中没有消息时，才从数据库加载
+                        // 如果 uiState 中已有消息，说明这个会话之前已经被加载过，直接使用即可
+                        if (uiState.messages.isEmpty()) {
+                            // 直接使用最新的 messagesFromDb 转换消息
+                            // 验证消息是否属于当前会话（防止时序问题导致使用旧会话的消息）
+                            val latestMessages = messagesFromDb
+                                .filter { it.sessionId == session.id } // 确保消息属于当前会话
+                                .map { entity ->
+                                    convertMessageEntityToMessage(entity)
+                                }
+                            
+                            // 添加数据库中的消息
+                            latestMessages.forEach { msg ->
+                                uiState.addMessage(msg)
+                            }
                         }
-                        // 添加数据库中的消息
-                        convertedMessages.forEach { msg ->
-                            uiState.addMessage(msg)
-                        }
+                        // 如果 uiState.messages 不为空，说明消息已经在 uiState 中（从缓存恢复），
+                        // processMessage 和 Regenerate 也会更新 uiState 中的消息，所以不需要重新加载
+                        
                         // 更新 channelName
                         uiState.channelName = session.name.ifBlank { "新对话" }
                         // 注意：isGenerating、isRecording、isTranscribing、pendingTranscription、
