@@ -42,7 +42,8 @@ class ChatViewModel(
     private val observeMessagesUseCase: ObserveMessagesUseCase,
     private val getDraftUseCase: GetDraftUseCase,
     private val updateDraftUseCase: UpdateDraftUseCase,
-    private val searchSessionsUseCase: SearchSessionsUseCase
+    private val searchSessionsUseCase: SearchSessionsUseCase,
+    private val getTopSessionsUseCase: GetTopSessionsUseCase
 ) : ViewModel() {
 
     private val _sessions = MutableStateFlow<List<SessionEntity>>(emptyList())
@@ -112,6 +113,24 @@ class ChatViewModel(
 
     fun clearAllUiStates() {
         uiStateCache.clear()
+    }
+
+    /**
+     * 预热 LRU Cache：从数据库获取前 5 条会话历史数据并预加载到缓存中
+     */
+    fun warmupCache() {
+        viewModelScope.launch {
+            try {
+                val topSessions = getTopSessionsUseCase(5)
+                topSessions.forEach { session ->
+                    // 为每个会话创建 UI 状态并添加到缓存中
+                    getOrCreateSessionUiState(session.id, session.name)
+                }
+                Log.d("ChatViewModel", "LRU Cache warmed up with ${topSessions.size} sessions")
+            } catch (e: Exception) {
+                Log.e("ChatViewModel", "Failed to warmup cache", e)
+            }
+        }
     }
 
     init {
@@ -449,6 +468,7 @@ class ChatViewModel(
 
                 val getDraftUseCase = GetDraftUseCase(draftLocalDataSource)
                 val updateDraftUseCase = UpdateDraftUseCase(draftLocalDataSource)
+                val getTopSessionsUseCase = GetTopSessionsUseCase(sessionLocalDataSource)
 
                 return ChatViewModel(
                     getSessionListUseCase,
@@ -462,7 +482,8 @@ class ChatViewModel(
                     observeMessagesUseCase,
                     getDraftUseCase,
                     updateDraftUseCase,
-                    searchSessionsUseCase
+                    searchSessionsUseCase,
+                    getTopSessionsUseCase
                 ) as T
             }
         }

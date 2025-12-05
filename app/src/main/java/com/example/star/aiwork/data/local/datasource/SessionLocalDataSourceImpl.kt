@@ -21,6 +21,10 @@ class SessionLocalDataSourceImpl(context: Context) : SessionLocalDataSource {
         return sessionDao.getSessions()
     }
 
+    override suspend fun getTopSessions(limit: Int): List<SessionEntity> {
+        return sessionDao.getTopSessions(limit)
+    }
+
     override suspend fun deleteSession(id: String) {
         sessionDao.deleteSession(id)
     }

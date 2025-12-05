@@ -21,6 +21,11 @@ interface SessionLocalDataSource {
     fun observeSessions(): Flow<List<SessionEntity>>
 
     /**
+     * 获取前 N 条会话（用于预热缓存）
+     */
+    suspend fun getTopSessions(limit: Int): List<SessionEntity>
+
+    /**
      * 删除会话
      */
     suspend fun deleteSession(id: String)

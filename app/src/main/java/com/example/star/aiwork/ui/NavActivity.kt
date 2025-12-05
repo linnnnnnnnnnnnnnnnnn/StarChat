@@ -72,6 +72,9 @@ class NavActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // 处理窗口内边距，确保内容不会被系统栏遮挡
         ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets -> insets }
+        
+        // 预热 LRU Cache：在应用启动时从数据库获取前 5 条会话历史数据
+        chatViewModel.warmupCache()
 
         setContentView(
             ComposeView(this).apply {
