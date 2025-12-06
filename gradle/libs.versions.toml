@@ -46,7 +46,7 @@ kotlinx_immutable = "0.4.0"
 ksp = "2.3.0"
 maps-compose = "6.12.1"
 # @keep
-minSdk = "23"
+minSdk = "24"
 okhttp = "5.2.1"
 pdfbox-android = "2.0.27.0"
 play-services-wearable = "19.0.0"

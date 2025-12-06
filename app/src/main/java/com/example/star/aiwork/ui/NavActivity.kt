@@ -43,6 +43,7 @@ import androidx.navigation.fragment.NavHostFragment
 import com.example.star.aiwork.R
 import com.example.star.aiwork.databinding.ContentMainBinding
 import com.example.star.aiwork.domain.model.SessionEntity
+import com.example.star.aiwork.infra.embedding.EmbeddingModelTest
 import com.example.star.aiwork.ui.components.DeleteSessionDialog
 import com.example.star.aiwork.ui.components.JetchatDrawer
 import com.example.star.aiwork.ui.components.RenameSessionDialog

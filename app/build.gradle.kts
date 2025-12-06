@@ -159,4 +159,10 @@ dependencies {
     
     // Jsoup for HTML parsing
     implementation("org.jsoup:jsoup:1.17.2")
+
+    // for Embedding
+    implementation("com.google.mediapipe:tasks-text:0.10.0")
+    
+    // TensorFlow Lite
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
 }
