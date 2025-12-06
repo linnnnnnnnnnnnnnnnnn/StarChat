@@ -1,22 +1,19 @@
-package com.example.star.aiwork.domain.model
+package com.example.star.aiwork.domain.model.embedding
 
-/**
- * 向量嵌入的域模型。
- *
- * @property id 向量 ID
- * @property text 原始文本内容
- * @property embedding 向量数组（768维）
- */
-data class Embedding(
-    val id: Int = 0,
-    val text: String,
-    val embedding: FloatArray
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "embeddings")
+data class EmbeddingEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val text: String,                 // 原始内容
+    val embedding: FloatArray         // 向量（768维）
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
 
-        other as Embedding
+        other as EmbeddingEntity
 
         if (id != other.id) return false
         if (text != other.text) return false

@@ -3,7 +3,7 @@ package com.example.star.aiwork.data.local.dao
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
-import com.example.star.aiwork.domain.model.EmbeddingEntity
+import com.example.star.aiwork.domain.model.embedding.EmbeddingEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao

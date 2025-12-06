@@ -1,6 +1,6 @@
 package com.example.star.aiwork.data.local.datasource
 
-import com.example.star.aiwork.domain.model.EmbeddingEntity
+import com.example.star.aiwork.domain.model.embedding.EmbeddingEntity
 import kotlinx.coroutines.flow.Flow
 
 interface EmbeddingLocalDataSource {

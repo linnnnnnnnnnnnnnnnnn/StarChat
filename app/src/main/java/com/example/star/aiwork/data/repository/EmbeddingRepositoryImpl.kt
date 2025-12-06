@@ -3,7 +3,7 @@ package com.example.star.aiwork.data.repository
 import com.example.star.aiwork.data.repository.mapper.toDomain
 import com.example.star.aiwork.data.repository.mapper.toEntity
 import com.example.star.aiwork.data.local.dao.EmbeddingDao
-import com.example.star.aiwork.domain.model.Embedding
+import com.example.star.aiwork.domain.model.embedding.Embedding
 
 class EmbeddingRepositoryImpl(
     private val dao: EmbeddingDao

@@ -2,7 +2,7 @@ package com.example.star.aiwork.data.local.datasource
 
 import android.content.Context
 import com.example.star.aiwork.data.local.EmbeddingDatabaseProvider
-import com.example.star.aiwork.domain.model.EmbeddingEntity
+import com.example.star.aiwork.domain.model.embedding.EmbeddingEntity
 import kotlinx.coroutines.flow.Flow
 
 class EmbeddingLocalDataSourceImpl(context: Context) : EmbeddingLocalDataSource {
