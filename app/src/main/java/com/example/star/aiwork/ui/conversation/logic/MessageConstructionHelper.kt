@@ -88,7 +88,8 @@ object MessageConstructionHelper {
             augmentedInput
         }
 
-        // 获取历史消息
+        // 获取历史消息（当前对话的历史聊天记录）
+        // 注意：USER 和 ASSISTANT 角色的消息本身就是历史聊天记录，模型可以通过角色区分
         val contextMessages = uiState.messages.asReversed()
             .filter { it.author != "System" }
             .map { msg ->
@@ -123,7 +124,14 @@ object MessageConstructionHelper {
             val relatedContextText = relatedSentences.joinToString("\n") { "- $it" }
             val relatedContextMessage = UIMessage(
                 role = MessageRole.SYSTEM,
-                parts = listOf(UIMessagePart.Text("相关上下文信息：\n$relatedContextText"))
+                parts = listOf(UIMessagePart.Text("""
+                    [长期记忆 - 从用户历史对话中提取的相关信息]
+                    以下是基于当前问题从长期记忆中检索到的相关信息，这些信息来自用户之前的对话记录：
+                    
+                    $relatedContextText
+                    
+                    请注意：上述内容是长期记忆，不是当前对话的历史记录。请结合上面的历史聊天记录和这些长期记忆来回答用户的问题。
+                """.trimIndent()))
             )
             // 在历史消息后面添加相关句子
             contextMessages.add(relatedContextMessage)
