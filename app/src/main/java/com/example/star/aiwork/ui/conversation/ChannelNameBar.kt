@@ -34,6 +34,15 @@ import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.ui.FunctionalityNotAvailablePopup
 import com.example.star.aiwork.ui.components.JetchatAppBar
 import com.example.star.aiwork.ui.theme.JetchatTheme
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,36 +123,63 @@ fun SearchAppBar(
     onSessionSelected: (SessionEntity) -> Unit,
     onCloseSearch: () -> Unit
 ) {
-    var isDropdownExpanded by remember { mutableStateOf(false) }
+    // 用于获取输入框的尺寸，以便让下拉菜单宽度与输入框一致
+    var textFieldSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // 只有当有搜索词且有结果时才显示弹窗
+    val showResults = query.isNotEmpty() && searchResults.isNotEmpty()
 
     TopAppBar(
         title = {
-            ExposedDropdownMenuBox(expanded = isDropdownExpanded, onExpandedChange = { isDropdownExpanded = !it }) {
+            Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = query,
-                    onValueChange = {
-                        onQueryChange(it)
-                        isDropdownExpanded = it.isNotEmpty()
-                    },
+                    onValueChange = onQueryChange,
                     placeholder = { Text("搜索会话...") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .onSizeChanged { textFieldSize = it }, // [关键] 获取输入框尺寸
                     singleLine = true
                 )
-                ExposedDropdownMenu(
-                    expanded = isDropdownExpanded && searchResults.isNotEmpty(),
-                    onDismissRequest = { isDropdownExpanded = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    searchResults.forEach { session ->
-                        DropdownMenuItem(
-                            text = { Text(session.name) },
-                            onClick = {
-                                onSessionSelected(session)
-                                isDropdownExpanded = false
-                            }
+
+                if (showResults) {
+                    // 使用原生 Popup 替代 ExposedDropdownMenu
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        // 让弹窗显示在输入框正下方
+                        offset = IntOffset(0, textFieldSize.height),
+                        properties = PopupProperties(
+                            // focusable = false 确保弹窗永远不会抢走输入框的光标
+                            focusable = false,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = true
                         )
+                    ) {
+                        // 使用 Surface 模拟菜单的卡片样式
+                        Surface(
+                            modifier = Modifier
+                                .width(with(LocalDensity.current) { textFieldSize.width.toDp() }), // 宽度对齐输入框
+                            shape = MaterialTheme.shapes.extraSmall, // 保持与 ExposedDropdownMenu 类似的圆角
+                            tonalElevation = 3.dp,
+                            shadowElevation = 3.dp
+                        ) {
+                            // 添加滚动支持，防止结果太多占满屏幕
+                            Column(
+                                modifier = Modifier
+                                    .heightIn(max = 300.dp) // 限制最大高度
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                searchResults.forEach { session ->
+                                    DropdownMenuItem(
+                                        text = { Text(session.name) },
+                                        onClick = {
+                                            onSessionSelected(session)
+                                            // 点击后通常会清空搜索或关闭，由上层逻辑控制
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

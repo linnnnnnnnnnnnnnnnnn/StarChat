@@ -28,4 +28,9 @@ class MessageLocalDataSourceImpl(context: Context) : MessageLocalDataSource {
     override suspend fun deleteMessage(messageId: String) {
         messageDao.deleteMessage(messageId)
     }
+
+    override suspend fun getMessagesByPage(sessionId: String, page: Int, pageSize: Int): List<MessageEntity> {
+        val offset = page * pageSize
+        return messageDao.getMessagesByPage(sessionId, pageSize, offset)
+    }
 }

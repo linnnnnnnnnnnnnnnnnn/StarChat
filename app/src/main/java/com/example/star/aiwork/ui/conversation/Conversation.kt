@@ -79,6 +79,9 @@ import java.util.UUID
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 
 /**
  * 对话屏幕的入口点。
@@ -131,6 +134,7 @@ fun ConversationContent(
     searchResults: List<SessionEntity>,
     onSessionSelected: (SessionEntity) -> Unit,
     generateChatNameUseCase: GenerateChatNameUseCase? = null
+    onLoadMoreMessages: () -> Unit
 ) {
     val authorMe = stringResource(R.string.author_me)
     val timeNow = stringResource(id = R.string.now)
@@ -273,6 +277,16 @@ fun ConversationContent(
             audioRecorder.stopRecording()
             audioRecorder.cleanup()
         }
+    }
+
+    LaunchedEffect(scrollState) {
+        snapshotFlow { scrollState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
+            .map { it == uiState.messages.lastIndex }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect {
+                onLoadMoreMessages()
+            }
     }
 
     Scaffold(
@@ -448,6 +462,7 @@ fun ConversationPreview() {
             searchResults = emptyList(),
             onSessionSelected = {},
             generateChatNameUseCase = null  // ← 新增参数
+            onLoadMoreMessages = {}
         )
     }
 }

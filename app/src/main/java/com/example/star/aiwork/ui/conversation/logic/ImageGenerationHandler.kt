@@ -9,7 +9,7 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
+import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -82,7 +82,7 @@ class ImageGenerationHandler(
                     if (uiState.messages.isNotEmpty() && uiState.messages[0].content.isBlank()) {
                         uiState.removeFirstMessage()
                     }
-                    val errorMessage = formatErrorMessage(error as? Exception ?: Exception(error.message, error))
+                    val errorMessage = getErrorMessage(error)
                     uiState.addMessage(Message("System", errorMessage, timeNow))
                 }
                 error.printStackTrace()

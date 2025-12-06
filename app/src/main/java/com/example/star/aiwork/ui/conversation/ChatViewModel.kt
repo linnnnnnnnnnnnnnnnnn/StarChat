@@ -17,6 +17,7 @@ import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.domain.model.SessionMetadata
 import com.example.star.aiwork.domain.usecase.draft.GetDraftUseCase
 import com.example.star.aiwork.domain.usecase.draft.UpdateDraftUseCase
+import com.example.star.aiwork.domain.usecase.message.GetMessagesByPageUseCase
 import com.example.star.aiwork.domain.usecase.message.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.message.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.message.ObserveMessagesUseCase
@@ -29,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import java.util.*
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.debounce
+import com.example.star.aiwork.ui.conversation.MessageMapper
 
 class ChatViewModel(
     private val getSessionListUseCase: GetSessionListUseCase,
@@ -40,6 +42,7 @@ class ChatViewModel(
     private val sendMessageUseCase: SendMessageUseCase,
     private val rollbackMessageUseCase: RollbackMessageUseCase,
     private val observeMessagesUseCase: ObserveMessagesUseCase,
+    private val getMessagesByPageUseCase: GetMessagesByPageUseCase,
     private val getDraftUseCase: GetDraftUseCase,
     private val updateDraftUseCase: UpdateDraftUseCase,
     private val searchSessionsUseCase: SearchSessionsUseCase,
@@ -62,6 +65,8 @@ class ChatViewModel(
     // 跟踪临时创建的会话（isNewChat标记）
     private val _newChatSessions = MutableStateFlow<Set<String>>(emptySet())
     val newChatSessions: StateFlow<Set<String>> = _newChatSessions.asStateFlow()
+
+    private val paginators = mutableMapOf<String, MessagePaginator>()
 
     // 使用 flatMapLatest 自动根据 currentSession 切换消息流
     val messages: StateFlow<List<MessageEntity>> = _currentSession
@@ -308,6 +313,7 @@ class ChatViewModel(
             }
             // 清理该会话的 UI 状态（从 LRU Cache 中移除）
             uiStateCache.remove(sessionId)
+            paginators.remove(sessionId)
             // 刷新会话列表
             loadSessions()
         }
@@ -332,6 +338,29 @@ class ChatViewModel(
             archiveSessionUseCase(sessionId, archived)
             // 刷新会话列表
             loadSessions()
+        }
+    }
+
+    fun loadMoreMessages() {
+        viewModelScope.launch {
+            val session = _currentSession.value ?: return@launch
+            val uiState = getSessionUiState(session.id) ?: return@launch
+            val paginator = paginators.getOrPut(session.id) { MessagePaginator() }
+
+            if (uiState.isLoadingMore || paginator.allMessagesLoaded) return@launch
+
+            uiState.isLoadingMore = true
+
+            val olderMessages = getMessagesByPageUseCase(session.id, paginator.currentPage, 10)
+            if (olderMessages.isNotEmpty()) {
+                val messageMapper = MessageMapper("me")
+                uiState.addOlderMessages(olderMessages.map(messageMapper::toUiModel))
+                paginator.currentPage++
+            } else {
+                paginator.allMessagesLoaded = true
+                uiState.allMessagesLoaded = true
+            }
+            uiState.isLoadingMore = false
         }
     }
 
@@ -420,6 +449,7 @@ class ChatViewModel(
         // messages 会自动通过 flatMapLatest 加载，无需手动调用 loadMessages
         // 确保会话的 UI 状态已创建
         getOrCreateSessionUiState(session.id, session.name)
+        paginators.getOrPut(session.id) { MessagePaginator() }
         loadDraft()
     }
 
@@ -468,6 +498,7 @@ class ChatViewModel(
                 val sendMessageUseCase = SendMessageUseCase(messageLocalDataSource, sessionLocalDataSource)
                 val rollbackMessageUseCase = RollbackMessageUseCase(messageLocalDataSource)
                 val observeMessagesUseCase = ObserveMessagesUseCase(messageLocalDataSource)
+                val getMessagesByPageUseCase = GetMessagesByPageUseCase(messageLocalDataSource)
 
                 val getDraftUseCase = GetDraftUseCase(draftLocalDataSource)
                 val updateDraftUseCase = UpdateDraftUseCase(draftLocalDataSource)
@@ -483,6 +514,7 @@ class ChatViewModel(
                     sendMessageUseCase,
                     rollbackMessageUseCase,
                     observeMessagesUseCase,
+                    getMessagesByPageUseCase,
                     getDraftUseCase,
                     updateDraftUseCase,
                     searchSessionsUseCase,

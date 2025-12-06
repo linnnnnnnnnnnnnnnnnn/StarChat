@@ -5,7 +5,6 @@ import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logThrowableChain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope

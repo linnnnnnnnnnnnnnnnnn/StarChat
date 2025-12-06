@@ -10,6 +10,8 @@ import com.example.star.aiwork.ui.ai.ImageGenerationResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import okhttp3.OkHttpClient
+import com.example.star.aiwork.data.repository.mapper.toLlmError
+import kotlinx.coroutines.flow.catch
 
 class AiRepositoryImpl(
     private val remoteChatDataSource: StreamingChatRemoteDataSource,
@@ -24,7 +26,12 @@ class AiRepositoryImpl(
     ): Flow<String> {
         // 统一委托给 StreamingChatRemoteDataSource，让其内部根据 Provider 类型路由到 OpenAI 或 Gemini。
         val upstream = remoteChatDataSource.streamChat(history, providerSetting, params, taskId)
+
         return normalizeChunks(upstream)
+            // 在这里统一拦截所有异常，将其转化为 LlmError 重新抛出
+            .catch { e ->
+                throw e.toLlmError()
+            }
     }
 
     override suspend fun cancelStreaming(taskId: String) {
