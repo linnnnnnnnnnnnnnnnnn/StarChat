@@ -52,6 +52,11 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
+import com.example.star.aiwork.data.repository.EmbeddingRepositoryImpl
+import com.example.star.aiwork.data.local.EmbeddingDatabaseProvider
+import com.example.star.aiwork.infra.embedding.EmbeddingService
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import kotlinx.coroutines.launch
@@ -127,11 +132,26 @@ class ConversationFragment : Fragment() {
                     GenerateChatNameUseCase(aiRepository)
                 }
 
+                // 创建 Embedding 相关的 UseCase
+                val embeddingService = remember(context) { EmbeddingService(context) }
+                val embeddingRepository = remember(context) {
+                    val database = EmbeddingDatabaseProvider.getDatabase(context)
+                    EmbeddingRepositoryImpl(database.embeddingDao())
+                }
+                val computeEmbeddingUseCase = remember(embeddingService) {
+                    ComputeEmbeddingUseCase(embeddingService)
+                }
+                val searchEmbeddingUseCase = remember(embeddingRepository) {
+                    SearchEmbeddingUseCase(embeddingRepository)
+                }
+
                 val conversationLogic = remember(
                     currentSession?.id,
                     uiState,
                     chatViewModel,
-                    providerSettings // Add providerSettings as a dependency
+                    providerSettings, // Add providerSettings as a dependency
+                    computeEmbeddingUseCase,
+                    searchEmbeddingUseCase
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -166,7 +186,10 @@ class ConversationFragment : Fragment() {
                             // 刷新会话列表，让 drawer 中的会话按 updatedAt 排序
                             chatViewModel.refreshSessions()
                         },
-                        taskManager = chatViewModel.streamingTaskManager
+                        taskManager = chatViewModel.streamingTaskManager,
+                        computeEmbeddingUseCase = computeEmbeddingUseCase,
+                        searchEmbeddingUseCase = searchEmbeddingUseCase,
+                        embeddingTopK = 3
                     )
                 }
 

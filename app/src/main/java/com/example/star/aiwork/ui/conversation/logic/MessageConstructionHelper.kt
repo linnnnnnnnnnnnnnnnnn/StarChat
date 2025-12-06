@@ -13,6 +13,8 @@ import coil.size.Size
 import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
+import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.infra.util.toBase64
 import com.example.star.aiwork.ui.ai.UIMessage
 import com.example.star.aiwork.ui.ai.UIMessagePart
@@ -28,7 +30,10 @@ object MessageConstructionHelper {
         isAutoTriggered: Boolean,
         activeAgent: Agent?,
         retrieveKnowledge: suspend (String) -> String,
-        context: Context
+        context: Context,
+        computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
+        searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
+        topK: Int = 3
     ): List<UIMessage> {
         return constructMessages(
             uiState,
@@ -38,7 +43,10 @@ object MessageConstructionHelper {
             activeAgent,
             null,
             retrieveKnowledge,
-            context
+            context,
+            computeEmbeddingUseCase,
+            searchEmbeddingUseCase,
+            topK
         )
     }
 
@@ -50,7 +58,10 @@ object MessageConstructionHelper {
         activeAgent: Agent?,
         knowledgeContext: String? = null,
         retrieveKnowledge: (suspend (String) -> String)? = null,
-        context: Context
+        context: Context,
+        computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
+        searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
+        topK: Int = 3
     ): List<UIMessage> {
 
         val finalKnowledgeContext = knowledgeContext ?: if (!isAutoTriggered && retrieveKnowledge != null) {
@@ -77,6 +88,7 @@ object MessageConstructionHelper {
             augmentedInput
         }
 
+        // 获取历史消息
         val contextMessages = uiState.messages.asReversed()
             .filter { it.author != "System" }
             .map { msg ->
@@ -87,6 +99,35 @@ object MessageConstructionHelper {
                 }
                 UIMessage(role = role, parts = parts)
             }.takeLast(10).toMutableList()
+
+        // 在向模型发送信息之前，计算用户输入的 embedding 并搜索相关句子
+        val relatedSentences = mutableListOf<String>()
+        if (!isAutoTriggered && computeEmbeddingUseCase != null && searchEmbeddingUseCase != null && inputContent.isNotBlank()) {
+            try {
+                // 计算用户输入的 embedding
+                val queryEmbedding = computeEmbeddingUseCase(inputContent)
+                if (queryEmbedding != null) {
+                    // 搜索 top-k 相关的句子
+                    val searchResults = searchEmbeddingUseCase(queryEmbedding, topK)
+                    // 提取文本（注意是 text 而不是 floatarray）
+                    relatedSentences.addAll(searchResults.map { it.first.text })
+                    Log.d("MessageConstruction", "找到 ${relatedSentences.size} 条相关句子")
+                }
+            } catch (e: Exception) {
+                Log.e("MessageConstruction", "计算 embedding 或搜索相关句子失败", e)
+            }
+        }
+
+        // 将搜索到的相关句子添加到历史记录后面（作为系统消息或用户消息的上下文）
+        if (relatedSentences.isNotEmpty()) {
+            val relatedContextText = relatedSentences.joinToString("\n") { "- $it" }
+            val relatedContextMessage = UIMessage(
+                role = MessageRole.SYSTEM,
+                parts = listOf(UIMessagePart.Text("相关上下文信息：\n$relatedContextText"))
+            )
+            // 在历史消息后面添加相关句子
+            contextMessages.add(relatedContextMessage)
+        }
 
         val messagesToSend = mutableListOf<UIMessage>()
 

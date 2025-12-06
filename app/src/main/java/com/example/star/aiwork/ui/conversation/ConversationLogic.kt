@@ -14,6 +14,8 @@ import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.isCancellationRelatedException
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
@@ -60,7 +62,10 @@ class ConversationLogic(
     private val onPersistNewChatSession: suspend (sessionId: String) -> Unit = { },
     private val isNewChat: (sessionId: String) -> Boolean = { false },
     private val onSessionUpdated: suspend (sessionId: String) -> Unit = { },
-    private val taskManager: StreamingTaskManager? = null
+    private val taskManager: StreamingTaskManager? = null,
+    private val computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
+    private val searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
+    private val embeddingTopK: Int = 3
 ) {
 
     // 用于保存流式收集协程的 Job，以便可以立即取消
@@ -314,7 +319,10 @@ class ConversationLogic(
                     isAutoTriggered = isAutoTriggered,
                     activeAgent = uiState.activeAgent,
                     retrieveKnowledge = retrieveKnowledge,
-                    context = context
+                    context = context,
+                    computeEmbeddingUseCase = computeEmbeddingUseCase,
+                    searchEmbeddingUseCase = searchEmbeddingUseCase,
+                    topK = embeddingTopK
                 )
 
                 val params = TextGenerationParams(
