@@ -133,7 +133,7 @@ fun ConversationContent(
     onSearchQueryChanged: (String) -> Unit,
     searchResults: List<SessionEntity>,
     onSessionSelected: (SessionEntity) -> Unit,
-    generateChatNameUseCase: GenerateChatNameUseCase? = null
+    generateChatNameUseCase: GenerateChatNameUseCase? = null,
     onLoadMoreMessages: () -> Unit
 ) {
     val authorMe = stringResource(R.string.author_me)
@@ -461,7 +461,7 @@ fun ConversationPreview() {
             onSearchQueryChanged = {},
             searchResults = emptyList(),
             onSessionSelected = {},
-            generateChatNameUseCase = null  // ← 新增参数
+            generateChatNameUseCase = null,  // ← 新增参数
             onLoadMoreMessages = {}
         )
     }
