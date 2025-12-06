@@ -92,8 +92,8 @@ class ConversationFragment : Fragment() {
 
                 // 获取或创建当前会话的 UI 状态
                 val uiState = remember(currentSession?.id) {
-                    currentSession?.let { session ->
-                        chatViewModel.getOrCreateSessionUiState(session.id, session.name)
+                    currentSession?.let {
+                        chatViewModel.getOrCreateSessionUiState(it.id, it.name)
                     } ?: ConversationUiState(
                         channelName = "新对话",
                         channelMembers = 1,
@@ -164,7 +164,7 @@ class ConversationFragment : Fragment() {
                         },
                         onSessionUpdated = { sessionId ->
                             // 刷新会话列表，让 drawer 中的会话按 updatedAt 排序
-                            chatViewModel.refreshSessions()
+                            scope.launch { chatViewModel.refreshSessions() }
                         },
                         taskManager = chatViewModel.streamingTaskManager
                     )
@@ -287,7 +287,8 @@ class ConversationFragment : Fragment() {
                         searchQuery = searchQuery,
                         onSearchQueryChanged = { query -> chatViewModel.searchSessions(query) },
                         searchResults = searchResults,
-                        onSessionSelected = { session -> chatViewModel.selectSession(session) }
+                        onSessionSelected = { session -> chatViewModel.selectSession(session) },
+                        onLoadMoreMessages = { chatViewModel.loadMoreMessages() }
                     )
                 }
             }

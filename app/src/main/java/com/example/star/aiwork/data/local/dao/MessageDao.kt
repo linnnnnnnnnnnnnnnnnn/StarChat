@@ -22,4 +22,7 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun deleteMessage(messageId: String)
+
+    @Query("SELECT * FROM messages WHERE sessionId = :sessionId ORDER BY createdAt DESC LIMIT :pageSize OFFSET :offset")
+    suspend fun getMessagesByPage(sessionId: String, pageSize: Int, offset: Int): List<MessageEntity>
 }

@@ -56,6 +56,10 @@ class ConversationUiState(
     private val _messages: MutableList<Message> = initialMessages.toMutableStateList()
     val messages: List<Message> = _messages
 
+    // 分页加载状态
+    var isLoadingMore: Boolean by mutableStateOf(false)
+    var allMessagesLoaded: Boolean by mutableStateOf(false)
+
     // AI 模型参数状态
     var temperature: Float by mutableFloatStateOf(0.7f)
     var maxTokens: Int by mutableIntStateOf(2000)
@@ -110,6 +114,13 @@ class ConversationUiState(
     }
 
     /**
+     * 添加历史消息到列表末尾
+     */
+    fun addOlderMessages(olderMessages: List<Message>) {
+        _messages.addAll(olderMessages)
+    }
+
+    /**
      * 移除列表顶部的一条消息。
      * 用于在发送失败等场景下回滚 UI。
      */
@@ -125,6 +136,8 @@ class ConversationUiState(
      */
     fun clearMessages() {
         _messages.clear()
+        isLoadingMore = false
+        allMessagesLoaded = false
     }
 
     /**

@@ -14,4 +14,6 @@ interface MessageLocalDataSource {
     suspend fun deleteMessagesBySession(sessionId: String)
 
     suspend fun deleteMessage(messageId: String)
+
+    suspend fun getMessagesByPage(sessionId: String, page: Int, pageSize: Int): List<MessageEntity>
 }
