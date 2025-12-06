@@ -53,6 +53,7 @@ import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.data.repository.EmbeddingRepositoryImpl
 import com.example.star.aiwork.data.local.EmbeddingDatabaseProvider
@@ -144,6 +145,9 @@ class ConversationFragment : Fragment() {
                 val searchEmbeddingUseCase = remember(embeddingRepository) {
                     SearchEmbeddingUseCase(embeddingRepository)
                 }
+                val saveEmbeddingUseCase = remember(embeddingRepository) {
+                    SaveEmbeddingUseCase(embeddingRepository)
+                }
 
                 val conversationLogic = remember(
                     currentSession?.id,
@@ -151,7 +155,8 @@ class ConversationFragment : Fragment() {
                     chatViewModel,
                     providerSettings, // Add providerSettings as a dependency
                     computeEmbeddingUseCase,
-                    searchEmbeddingUseCase
+                    searchEmbeddingUseCase,
+                    saveEmbeddingUseCase
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -189,6 +194,7 @@ class ConversationFragment : Fragment() {
                         taskManager = chatViewModel.streamingTaskManager,
                         computeEmbeddingUseCase = computeEmbeddingUseCase,
                         searchEmbeddingUseCase = searchEmbeddingUseCase,
+                        saveEmbeddingUseCase = saveEmbeddingUseCase,
                         embeddingTopK = 3
                     )
                 }

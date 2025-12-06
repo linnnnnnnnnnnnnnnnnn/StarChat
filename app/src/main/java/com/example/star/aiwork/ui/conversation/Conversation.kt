@@ -418,7 +418,10 @@ fun ConversationPreview() {
             persistenceGateway = persistenceGateway,
             onRenameSession = { _, _ -> },
             onPersistNewChatSession = { },
-            isNewChat = { false }
+            isNewChat = { false },
+            computeEmbeddingUseCase = null,
+            searchEmbeddingUseCase = null,
+            saveEmbeddingUseCase = null
         )
 
         ConversationContent(

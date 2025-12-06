@@ -15,12 +15,14 @@ import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.isCancellationRelatedException
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
 import com.example.star.aiwork.ui.conversation.logic.AutoLoopHandler
 import com.example.star.aiwork.ui.conversation.logic.ImageGenerationHandler
+import com.example.star.aiwork.ui.conversation.logic.MemoryTriggerFilter
 import com.example.star.aiwork.ui.conversation.logic.MessageConstructionHelper
 import com.example.star.aiwork.ui.conversation.logic.RollbackHandler
 import com.example.star.aiwork.ui.conversation.logic.StreamingResponseHandler
@@ -65,6 +67,7 @@ class ConversationLogic(
     private val taskManager: StreamingTaskManager? = null,
     private val computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
     private val searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
+    private val saveEmbeddingUseCase: SaveEmbeddingUseCase? = null,
     private val embeddingTopK: Int = 3
 ) {
 
@@ -110,6 +113,11 @@ class ConversationLogic(
         sendMessageUseCase = sendMessageUseCase,
         getProviderSettings = getProviderSettings,
         timeNow = timeNow
+    )
+
+    private val memoryTriggerFilter = MemoryTriggerFilter(
+        computeEmbeddingUseCase = computeEmbeddingUseCase,
+        saveEmbeddingUseCase = saveEmbeddingUseCase
     )
 
     /**
@@ -193,6 +201,11 @@ class ConversationLogic(
         retrieveKnowledge: suspend (String) -> String = { "" },
         isRetry: Boolean = false
     ) {
+        // Memory Trigger Filter: 检测并保存记忆
+        if (!isAutoTriggered) {
+            memoryTriggerFilter.processMemoryIfNeeded(inputContent)
+        }
+        
         // Session management (New Chat / Rename)
         if (isNewChat(sessionId)) {
             onPersistNewChatSession(sessionId)
