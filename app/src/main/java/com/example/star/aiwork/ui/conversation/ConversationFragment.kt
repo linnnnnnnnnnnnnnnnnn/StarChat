@@ -57,6 +57,8 @@ import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 class ConversationFragment : Fragment() {
@@ -212,16 +214,14 @@ class ConversationFragment : Fragment() {
                             // 等待 messagesFromDb 异步更新到当前会话
                             // 通过 Flow 等待消息更新，确保获取的是当前会话的消息，而不是旧会话的消息
                             if (!isTemporarySession) {
-                                val latestMessagesFromFlow = chatViewModel.messages
-                                    .filter { messages ->
-                                        // 等待消息更新：要么所有消息都属于当前会话，要么列表为空（新会话）
-                                        messages.all { it.sessionId == session.id } || messages.isEmpty()
-                                    }
-                                    .first() // 等待第一次符合条件的更新
-                                
+                                // 修复 Bug：直接从数据库获取当前会话的消息，而不是依赖 ViewModel 共享的 messages 流
+                                // ViewModel 的 messages 流可能存在延迟或初始空值，导致 LaunchedEffect 提前结束
+                                val latestMessages = withContext(Dispatchers.IO) {
+                                    messageLocalDataSource.observeMessages(session.id).first()
+                                }
+
                                 // 转换消息并添加到 UI 状态
-                                latestMessagesFromFlow
-                                    .filter { it.sessionId == session.id } // 双重验证，确保消息属于当前会话
+                                latestMessages
                                     .map { entity ->
                                         convertMessageEntityToMessage(entity)
                                     }

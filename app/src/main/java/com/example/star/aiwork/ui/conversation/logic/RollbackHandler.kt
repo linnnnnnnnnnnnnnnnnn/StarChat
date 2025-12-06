@@ -1,6 +1,7 @@
 package com.example.star.aiwork.ui.conversation.logic
 
 import android.util.Log
+import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.domain.TextGenerationParams
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
@@ -9,8 +10,7 @@ import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.isCancellationRelatedException
+import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,14 +106,14 @@ class RollbackHandler(
                     withContext(Dispatchers.Main) {
                         uiState.isGenerating = false
                         uiState.updateLastMessageLoadingState(false)
-                        val errorMessage = formatErrorMessage(error as? Exception ?: Exception(error.message, error))
+                        val errorMessage = getErrorMessage(error)
                         uiState.addMessage(Message("System", errorMessage, timeNow))
                     }
                     error.printStackTrace()
                 }
             )
         } catch (e: Exception) {
-            if (e is CancellationException || isCancellationRelatedException(e)) {
+            if (e is CancellationException || e is LlmError.CancelledError) {
                 withContext(Dispatchers.Main) {
                     uiState.isGenerating = false
                     uiState.updateLastMessageLoadingState(false)
@@ -124,7 +124,7 @@ class RollbackHandler(
             withContext(Dispatchers.Main) {
                 uiState.isGenerating = false
                 uiState.updateLastMessageLoadingState(false)
-                val errorMessage = formatErrorMessage(e)
+                val errorMessage = getErrorMessage(e)
                 uiState.addMessage(Message("System", errorMessage, timeNow))
             }
             e.printStackTrace()

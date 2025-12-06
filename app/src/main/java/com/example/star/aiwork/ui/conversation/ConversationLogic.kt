@@ -14,8 +14,8 @@ import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.formatErrorMessage
-import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.isCancellationRelatedException
+import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
+import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
 import com.example.star.aiwork.ui.conversation.logic.AutoLoopHandler
 import com.example.star.aiwork.ui.conversation.logic.ImageGenerationHandler
@@ -417,7 +417,7 @@ class ConversationLogic(
     ) {
         Log.e("ConversationLogic", "❌ handleError triggered: ${e.javaClass.simpleName} - ${e.message}", e)
 
-        if (e is CancellationException || isCancellationRelatedException(e)) {
+        if (e is CancellationException || e is LlmError.CancelledError) {
             Log.d("ConversationLogic", "⚠️ Error is cancellation related, ignoring.")
             withContext(Dispatchers.Main) {
                 uiState.activeTaskId = null
@@ -519,7 +519,7 @@ class ConversationLogic(
                 uiState.removeFirstMessage()
             }
             
-            val errorMessage = formatErrorMessage(e)
+            val errorMessage = getErrorMessage(e)
             uiState.addMessage(
                 Message("System", errorMessage, timeNow)
             )
