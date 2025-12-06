@@ -20,6 +20,12 @@ interface EmbeddingDao {
     @Query("SELECT * FROM embeddings")
     fun getAllEmbeddings(): Flow<List<EmbeddingEntity>>
 
+    @Query("SELECT * FROM embeddings")
+    suspend fun getAll(): List<EmbeddingEntity>
+
+    @Upsert
+    suspend fun insert(embedding: EmbeddingEntity)
+
     @Query("DELETE FROM embeddings WHERE id = :id")
     suspend fun deleteEmbedding(id: Int)
 
