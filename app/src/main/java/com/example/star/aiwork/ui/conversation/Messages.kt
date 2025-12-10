@@ -102,7 +102,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
-import com.example.star.aiwork.ui.conversation.util.PythonHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.withContext
@@ -681,23 +680,6 @@ fun CodeBlockWithCopyButton(
     // 假设 highlightCode 是你现有的函数
     val highlightedCode = highlightCode(code, language.lowercase())
     val codeLines = getHighlightedLines(highlightedCode, lines.size)
-
-    // 处理运行逻辑
-    fun runPythonCode() {
-        if (isRunning) return
-        isRunning = true
-
-        scope.launch(Dispatchers.IO) {
-            // 调用你提供的 PythonHelper
-            val result = PythonHelper.runPythonCode(context, code)
-
-            withContext(Dispatchers.Main) {
-                executionResult = result
-                isRunning = false
-                showResultDialog = true
-            }
-        }
-    }
 
     Box(
         modifier = Modifier
