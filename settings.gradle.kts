@@ -20,7 +20,6 @@ pluginManagement {
         gradlePluginPortal()
         google()
         mavenCentral()
-        maven { url = uri("https://chaquo.com/maven") }
     }
 }
 dependencyResolutionManagement {
@@ -35,7 +34,6 @@ dependencyResolutionManagement {
         mavenCentral()
         // PDFBox-Android is available on Maven Central, but some older versions or dependencies might be on JitPack
         maven { url = uri("https://jitpack.io") }
-        maven { url = uri("https://chaquo.com/maven") }
     }
 }
 rootProject.name = "AiWork"

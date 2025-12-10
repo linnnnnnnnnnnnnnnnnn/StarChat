@@ -21,7 +21,6 @@ plugins {
     alias(libs.plugins.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    id("com.chaquo.python") version "15.0.1"
 }
 
 configurations.all {
@@ -40,10 +39,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables.useSupportLibrary = true
-        
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-        }
     }
 
     signingConfigs {
