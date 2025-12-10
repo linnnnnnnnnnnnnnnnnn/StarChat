@@ -728,35 +728,6 @@ fun CodeBlockWithCopyButton(
 
                     // 右侧按钮组
                     Row(verticalAlignment = Alignment.CenterVertically) {
-
-                        // --- 新增：运行按钮 (仅当语言是 Python 时显示) ---
-                        if (language.lowercase() == "python") {
-                            IconButton(
-                                onClick = { runPythonCode() },
-                                modifier = Modifier.size(24.dp),
-                                enabled = !isRunning,
-                            ) {
-                                if (isRunning) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
-                                        color = Color(0xFF4CAF50),
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "运行代码",
-                                        tint = Color(0xFF4CAF50), // 绿色代表运行
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            }
-
-                            // 按钮之间的间距
-                            Spacer(modifier = Modifier.width(16.dp))
-                        }
-                        // ------------------------------------------------
-
                         IconButton(
                             onClick = onCopy,
                             modifier = Modifier.size(24.dp),
@@ -816,34 +787,6 @@ fun CodeBlockWithCopyButton(
         }
     }
 
-    // --- 新增：运行结果弹窗 ---
-    if (showResultDialog && executionResult != null) {
-        AlertDialog(
-            onDismissRequest = { showResultDialog = false },
-            title = { Text("运行结果") },
-            text = {
-                Column {
-                    Surface(
-                        color = Color(0xFFF5F5F5),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = executionResult!!,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(8.dp),
-                            color = Color.Black,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showResultDialog = false }) {
-                    Text("关闭")
-                }
-            },
-        )
-    }
 }
 
 /**
