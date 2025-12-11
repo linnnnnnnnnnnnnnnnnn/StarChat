@@ -1,6 +1,6 @@
 package com.example.star.aiwork.domain.usecase.message
 
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSource
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
 import com.example.star.aiwork.domain.model.MessageEntity
 
 class GetMessagesByPageUseCase(private val messageLocalDataSource: MessageLocalDataSource) {

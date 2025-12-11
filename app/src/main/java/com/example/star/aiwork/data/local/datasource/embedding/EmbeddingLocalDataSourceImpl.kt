@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.embedding
 
 import android.content.Context
 import com.example.star.aiwork.data.local.EmbeddingDatabaseProvider
