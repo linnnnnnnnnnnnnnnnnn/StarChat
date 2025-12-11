@@ -6,9 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
-import com.example.star.aiwork.data.local.datasource.DraftLocalDataSourceImpl
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSourceImpl
-import com.example.star.aiwork.data.local.datasource.SessionLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.draft.DraftLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
 import com.example.star.aiwork.domain.model.MessageEntity
 import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.domain.model.MessageRole

@@ -45,8 +45,8 @@ import java.util.Locale
 import com.example.star.aiwork.data.remote.StreamingChatRemoteDataSource
 import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSourceImpl
-import com.example.star.aiwork.data.local.datasource.SessionLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase

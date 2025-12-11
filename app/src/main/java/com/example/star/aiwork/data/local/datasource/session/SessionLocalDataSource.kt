@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.session
 
 import com.example.star.aiwork.domain.model.SessionEntity
 import kotlinx.coroutines.flow.Flow
@@ -40,3 +40,4 @@ interface SessionLocalDataSource {
      */
     fun searchSessions(query: String): Flow<List<SessionEntity>>
 }
+

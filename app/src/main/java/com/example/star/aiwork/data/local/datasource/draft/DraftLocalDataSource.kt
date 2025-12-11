@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.draft
 
 import com.example.star.aiwork.domain.model.DraftEntity
 import kotlinx.coroutines.flow.Flow
@@ -13,3 +13,4 @@ interface DraftLocalDataSource {
 
     suspend fun deleteDraft(sessionId: String)
 }
+

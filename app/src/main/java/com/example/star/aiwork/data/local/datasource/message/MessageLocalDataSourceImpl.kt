@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.message
 
 import android.content.Context
 import com.example.star.aiwork.data.local.DatabaseProvider
@@ -34,3 +34,4 @@ class MessageLocalDataSourceImpl(context: Context) : MessageLocalDataSource {
         return messageDao.getMessagesByPage(sessionId, pageSize, offset)
     }
 }
+

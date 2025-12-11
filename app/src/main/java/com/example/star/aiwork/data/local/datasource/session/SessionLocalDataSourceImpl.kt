@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.session
 
 import android.content.Context
 import com.example.star.aiwork.data.local.DatabaseProvider
@@ -37,3 +37,4 @@ class SessionLocalDataSourceImpl(context: Context) : SessionLocalDataSource {
         return sessionDao.searchSessions(query)
     }
 }
+

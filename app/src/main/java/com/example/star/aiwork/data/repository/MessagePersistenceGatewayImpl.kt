@@ -1,8 +1,8 @@
 package com.example.star.aiwork.data.repository
 
 import android.util.Log
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSource
-import com.example.star.aiwork.data.local.datasource.SessionLocalDataSource
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
+import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageEntity
 import com.example.star.aiwork.domain.model.MessageMetadata

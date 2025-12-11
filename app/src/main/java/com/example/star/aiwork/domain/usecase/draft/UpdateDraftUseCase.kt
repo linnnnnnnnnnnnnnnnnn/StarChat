@@ -1,6 +1,6 @@
 package com.example.star.aiwork.domain.usecase.draft
 
-import com.example.star.aiwork.data.local.datasource.DraftLocalDataSource
+import com.example.star.aiwork.data.local.datasource.draft.DraftLocalDataSource
 import com.example.star.aiwork.domain.model.DraftEntity
 
 class UpdateDraftUseCase(

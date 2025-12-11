@@ -1,4 +1,4 @@
-package com.example.star.aiwork.data.local.datasource
+package com.example.star.aiwork.data.local.datasource.message
 
 import com.example.star.aiwork.domain.model.MessageEntity
 import kotlinx.coroutines.flow.Flow
@@ -17,3 +17,4 @@ interface MessageLocalDataSource {
 
     suspend fun getMessagesByPage(sessionId: String, page: Int, pageSize: Int): List<MessageEntity>
 }
+

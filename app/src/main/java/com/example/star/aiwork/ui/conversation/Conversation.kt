@@ -49,7 +49,7 @@ import com.example.star.aiwork.data.remote.StreamingChatRemoteDataSource
 import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
 import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
@@ -438,7 +438,7 @@ fun ConversationPreview() {
         val aiRepository = AiRepositoryImpl(remoteDataSource, okHttpClient)
 
         val messageLocalDataSource = MessageLocalDataSourceImpl(context)
-        val sessionLocalDataSource = com.example.star.aiwork.data.local.datasource.SessionLocalDataSourceImpl(context)
+        val sessionLocalDataSource = com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl(context)
         val persistenceGateway = MessagePersistenceGatewayImpl(messageLocalDataSource, sessionLocalDataSource)
 
         val sendMessageUseCase = SendMessageUseCase(aiRepository, persistenceGateway, scope)

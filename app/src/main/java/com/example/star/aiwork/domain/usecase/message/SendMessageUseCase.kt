@@ -1,7 +1,7 @@
 package com.example.star.aiwork.domain.usecase.message
 
-import com.example.star.aiwork.data.local.datasource.MessageLocalDataSource
-import com.example.star.aiwork.data.local.datasource.SessionLocalDataSource
+import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
+import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.MessageEntity
 
 @Deprecated("Use usecase/SendMessage instead")
