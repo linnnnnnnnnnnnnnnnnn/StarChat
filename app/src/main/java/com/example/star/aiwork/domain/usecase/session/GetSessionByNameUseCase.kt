@@ -1,12 +1,13 @@
 package com.example.star.aiwork.domain.usecase.session
 
-import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
+import com.example.star.aiwork.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.map
+
 class GetSessionByNameUseCase(
-    private val dataSource: SessionLocalDataSource
+    private val repository: SessionRepository
 ) {
     operator fun invoke(name: String) =
-        dataSource.observeSessions().map { list ->
+        repository.observeSessions().map { list ->
             list.firstOrNull { it.name == name }
         }
 }

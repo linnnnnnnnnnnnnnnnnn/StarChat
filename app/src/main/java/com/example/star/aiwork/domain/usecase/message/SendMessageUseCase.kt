@@ -1,21 +1,21 @@
 package com.example.star.aiwork.domain.usecase.message
 
-import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
-import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.MessageEntity
+import com.example.star.aiwork.domain.repository.MessageRepository
+import com.example.star.aiwork.domain.repository.SessionRepository
 
 @Deprecated("Use usecase/SendMessage instead")
 class SendMessageUseCase(
-    private val messageDataSource: MessageLocalDataSource,
-    private val sessionDataSource: SessionLocalDataSource
+    private val messageRepository: MessageRepository,
+    private val sessionRepository: SessionRepository
 ) {
     suspend operator fun invoke(message: MessageEntity) {
-        messageDataSource.upsertMessage(message)
+        messageRepository.upsertMessage(message)
 
         // 更新会话更新时间
-        val session = sessionDataSource.getSession(message.sessionId)
+        val session = sessionRepository.getSession(message.sessionId)
         if (session != null) {
-            sessionDataSource.upsertSession(
+            sessionRepository.upsertSession(
                 session.copy(updatedAt = System.currentTimeMillis())
             )
         }

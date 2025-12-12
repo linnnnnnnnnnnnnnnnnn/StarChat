@@ -1,12 +1,12 @@
 package com.example.star.aiwork.domain.usecase.message
 
-import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
+import com.example.star.aiwork.domain.repository.MessageRepository
 
 @Deprecated("Use RollbackHandler instead")
 class RollbackMessageUseCase(
-    private val messageDataSource: MessageLocalDataSource
+    private val repository: MessageRepository
 ) {
     suspend operator fun invoke(messageId: String) {
-        messageDataSource.deleteMessage(messageId)
+        repository.deleteMessage(messageId)
     }
 }

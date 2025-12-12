@@ -46,7 +46,11 @@ import com.example.star.aiwork.data.remote.StreamingChatRemoteDataSource
 import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
+import com.example.star.aiwork.data.repository.MessageRepositoryImpl
+import com.example.star.aiwork.data.repository.SessionRepositoryImpl
+import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
@@ -115,8 +119,17 @@ class ConversationFragment : Fragment() {
                 val remoteChatDataSource = remember { StreamingChatRemoteDataSource(sseClient) }
                 val aiRepository = remember { AiRepositoryImpl(remoteChatDataSource, okHttpClient) }
 
+                // Create DataSources
                 val messageLocalDataSource = remember(context) { MessageLocalDataSourceImpl(context) }
                 val sessionLocalDataSource = remember(context) { SessionLocalDataSourceImpl(context) }
+                val sessionCacheDataSource = remember { SessionCacheDataSourceImpl() }
+                
+                // Create Repositories
+                val messageRepository = remember(messageLocalDataSource) { MessageRepositoryImpl(messageLocalDataSource) }
+                val sessionRepository = remember(sessionCacheDataSource, sessionLocalDataSource) {
+                    SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
+                }
+                
                 val messagePersistenceGateway = remember(messageLocalDataSource, sessionLocalDataSource) {
                     MessagePersistenceGatewayImpl(messageLocalDataSource, sessionLocalDataSource)
                 }
@@ -264,7 +277,7 @@ class ConversationFragment : Fragment() {
                                 // 修复 Bug：直接从数据库获取当前会话的消息，而不是依赖 ViewModel 共享的 messages 流
                                 // ViewModel 的 messages 流可能存在延迟或初始空值，导致 LaunchedEffect 提前结束
                                 val latestMessages = withContext(Dispatchers.IO) {
-                                    messageLocalDataSource.observeMessages(session.id).first()
+                                    messageRepository.observeMessages(session.id).first()
                                 }
 
                                 // 转换消息并添加到 UI 状态

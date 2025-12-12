@@ -8,7 +8,12 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.star.aiwork.data.local.datasource.draft.DraftLocalDataSourceImpl
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
+import com.example.star.aiwork.data.repository.DraftRepositoryImpl
+import com.example.star.aiwork.data.repository.MessageRepositoryImpl
+import com.example.star.aiwork.data.repository.SessionRepositoryImpl
+import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
 import com.example.star.aiwork.domain.model.MessageEntity
 import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.domain.model.MessageRole
@@ -485,24 +490,30 @@ class ChatViewModel(
                 val sessionLocalDataSource = SessionLocalDataSourceImpl(application)
                 val messageLocalDataSource = MessageLocalDataSourceImpl(application)
                 val draftLocalDataSource = DraftLocalDataSourceImpl(application)
+                val sessionCacheDataSource: SessionCacheDataSource = SessionCacheDataSourceImpl()
+
+                // Create Repositories
+                val sessionRepository = SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
+                val messageRepository = MessageRepositoryImpl(messageLocalDataSource)
+                val draftRepository = DraftRepositoryImpl(draftLocalDataSource)
 
                 // Create UseCases
-                val getSessionListUseCase = GetSessionListUseCase(sessionLocalDataSource)
-                val createSessionUseCase = CreateSessionUseCase(sessionLocalDataSource)
-                val renameSessionUseCase = RenameSessionUseCase(sessionLocalDataSource)
-                val deleteSessionUseCase = DeleteSessionUseCase(sessionLocalDataSource, messageLocalDataSource, draftLocalDataSource)
-                val pinSessionUseCase = PinSessionUseCase(sessionLocalDataSource)
-                val archiveSessionUseCase = ArchiveSessionUseCase(sessionLocalDataSource)
-                val searchSessionsUseCase = SearchSessionsUseCase(sessionLocalDataSource)
+                val getSessionListUseCase = GetSessionListUseCase(sessionRepository)
+                val createSessionUseCase = CreateSessionUseCase(sessionRepository)
+                val renameSessionUseCase = RenameSessionUseCase(sessionRepository)
+                val deleteSessionUseCase = DeleteSessionUseCase(sessionRepository, messageRepository, draftRepository)
+                val pinSessionUseCase = PinSessionUseCase(sessionRepository)
+                val archiveSessionUseCase = ArchiveSessionUseCase(sessionRepository)
+                val searchSessionsUseCase = SearchSessionsUseCase(sessionRepository)
 
-                val sendMessageUseCase = SendMessageUseCase(messageLocalDataSource, sessionLocalDataSource)
-                val rollbackMessageUseCase = RollbackMessageUseCase(messageLocalDataSource)
-                val observeMessagesUseCase = ObserveMessagesUseCase(messageLocalDataSource)
-                val getMessagesByPageUseCase = GetMessagesByPageUseCase(messageLocalDataSource)
+                val sendMessageUseCase = SendMessageUseCase(messageRepository, sessionRepository)
+                val rollbackMessageUseCase = RollbackMessageUseCase(messageRepository)
+                val observeMessagesUseCase = ObserveMessagesUseCase(messageRepository)
+                val getMessagesByPageUseCase = GetMessagesByPageUseCase(messageRepository)
 
-                val getDraftUseCase = GetDraftUseCase(draftLocalDataSource)
-                val updateDraftUseCase = UpdateDraftUseCase(draftLocalDataSource)
-                val getTopSessionsUseCase = GetTopSessionsUseCase(sessionLocalDataSource)
+                val getDraftUseCase = GetDraftUseCase(draftRepository)
+                val updateDraftUseCase = UpdateDraftUseCase(draftRepository)
+                val getTopSessionsUseCase = GetTopSessionsUseCase(sessionRepository)
 
                 return ChatViewModel(
                     getSessionListUseCase,

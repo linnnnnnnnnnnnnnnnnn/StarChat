@@ -2,6 +2,7 @@ package com.example.star.aiwork.data.repository
 
 import com.example.star.aiwork.data.local.datasource.draft.DraftLocalDataSource
 import com.example.star.aiwork.domain.model.DraftEntity
+import com.example.star.aiwork.domain.repository.DraftRepository
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -14,14 +15,14 @@ import kotlinx.coroutines.flow.Flow
  */
 class DraftRepositoryImpl(
     private val localDataSource: DraftLocalDataSource
-) {
+) : DraftRepository {
 
     /**
      * 创建或更新草稿。
      * 
      * @param draft 草稿实体
      */
-    suspend fun upsertDraft(draft: DraftEntity) {
+    override suspend fun upsertDraft(draft: DraftEntity) {
         localDataSource.upsertDraft(draft)
     }
 
@@ -31,7 +32,7 @@ class DraftRepositoryImpl(
      * @param sessionId 会话 ID
      * @return 草稿实体，如果不存在则返回 null
      */
-    suspend fun getDraft(sessionId: String): DraftEntity? {
+    override suspend fun getDraft(sessionId: String): DraftEntity? {
         return localDataSource.getDraft(sessionId)
     }
 
@@ -42,7 +43,7 @@ class DraftRepositoryImpl(
      * @param sessionId 会话 ID
      * @return 草稿实体的 Flow
      */
-    fun observeDraft(sessionId: String): Flow<DraftEntity?> {
+    override fun observeDraft(sessionId: String): Flow<DraftEntity?> {
         return localDataSource.observeDraft(sessionId)
     }
 
@@ -51,7 +52,7 @@ class DraftRepositoryImpl(
      * 
      * @param sessionId 会话 ID
      */
-    suspend fun deleteDraft(sessionId: String) {
+    override suspend fun deleteDraft(sessionId: String) {
         localDataSource.deleteDraft(sessionId)
     }
 }
