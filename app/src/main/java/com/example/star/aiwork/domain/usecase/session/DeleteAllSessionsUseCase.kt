@@ -1,9 +1,9 @@
 package com.example.star.aiwork.domain.usecase.session
 
-import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
+import com.example.star.aiwork.domain.repository.SessionRepository
 
-class DeleteAllSessionsUseCase(private val sessionLocalDataSource: SessionLocalDataSource) {
+class DeleteAllSessionsUseCase(private val repository: SessionRepository) {
     suspend operator fun invoke() {
-        sessionLocalDataSource.deleteAllSessions()
+        repository.deleteAllSessions()
     }
 }

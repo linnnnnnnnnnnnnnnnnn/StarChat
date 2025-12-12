@@ -1,10 +1,10 @@
 package com.example.star.aiwork.domain.usecase.session
 
-import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.SessionEntity
+import com.example.star.aiwork.domain.repository.SessionRepository
 
 class GetSessionByIdUseCase(
-    private val dataSource: SessionLocalDataSource
+    private val repository: SessionRepository
 ) {
-    suspend operator fun invoke(id: String): SessionEntity? = dataSource.getSession(id)
+    suspend operator fun invoke(id: String): SessionEntity? = repository.getSession(id)
 }

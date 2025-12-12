@@ -3,6 +3,7 @@ package com.example.star.aiwork.data.repository
 import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSource
 import com.example.star.aiwork.domain.model.SessionEntity
+import com.example.star.aiwork.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.Flow
 class SessionRepositoryImpl(
     private val cacheDataSource: SessionCacheDataSource,
     private val localDataSource: SessionLocalDataSource
-) {
+) : SessionRepository {
 
     /**
      * 创建或更新会话。
@@ -26,7 +27,7 @@ class SessionRepositoryImpl(
      * 
      * @param session 会话实体
      */
-    suspend fun upsertSession(session: SessionEntity) {
+    override suspend fun upsertSession(session: SessionEntity) {
         // 同时更新缓存和数据库
         cacheDataSource.put(session.id, session)
         localDataSource.upsertSession(session)
@@ -39,7 +40,7 @@ class SessionRepositoryImpl(
      * @param id 会话 ID
      * @return 会话实体，如果不存在则返回 null
      */
-    suspend fun getSession(id: String): SessionEntity? {
+    override suspend fun getSession(id: String): SessionEntity? {
         // 先从缓存读取
         val cached = cacheDataSource.get(id)
         if (cached != null) {
@@ -62,7 +63,7 @@ class SessionRepositoryImpl(
      * 
      * @return 会话列表的 Flow
      */
-    fun observeSessions(): Flow<List<SessionEntity>> {
+    override fun observeSessions(): Flow<List<SessionEntity>> {
         return localDataSource.observeSessions()
     }
 
@@ -73,7 +74,7 @@ class SessionRepositoryImpl(
      * @param limit 限制数量
      * @return 会话列表
      */
-    suspend fun getTopSessions(limit: Int): List<SessionEntity> {
+    override suspend fun getTopSessions(limit: Int): List<SessionEntity> {
         val sessions = localDataSource.getTopSessions(limit)
         // 将获取的会话写入缓存
         sessions.forEach { session ->
@@ -88,7 +89,7 @@ class SessionRepositoryImpl(
      * 
      * @param id 会话 ID
      */
-    suspend fun deleteSession(id: String) {
+    override suspend fun deleteSession(id: String) {
         cacheDataSource.remove(id)
         localDataSource.deleteSession(id)
     }
@@ -97,7 +98,7 @@ class SessionRepositoryImpl(
      * 删除所有会话。
      * 同时清空缓存和数据库。
      */
-    suspend fun deleteAllSessions() {
+    override suspend fun deleteAllSessions() {
         cacheDataSource.clear()
         localDataSource.deleteAllSessions()
     }
@@ -109,7 +110,7 @@ class SessionRepositoryImpl(
      * @param query 搜索关键词
      * @return 搜索结果列表的 Flow
      */
-    fun searchSessions(query: String): Flow<List<SessionEntity>> {
+    override fun searchSessions(query: String): Flow<List<SessionEntity>> {
         return localDataSource.searchSessions(query)
     }
 

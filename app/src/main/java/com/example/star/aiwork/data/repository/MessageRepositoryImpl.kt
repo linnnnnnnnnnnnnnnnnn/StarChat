@@ -2,6 +2,7 @@ package com.example.star.aiwork.data.repository
 
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSource
 import com.example.star.aiwork.domain.model.MessageEntity
+import com.example.star.aiwork.domain.repository.MessageRepository
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -14,14 +15,14 @@ import kotlinx.coroutines.flow.Flow
  */
 class MessageRepositoryImpl(
     private val localDataSource: MessageLocalDataSource
-) {
+) : MessageRepository {
 
     /**
      * 创建或更新消息。
      * 
      * @param message 消息实体
      */
-    suspend fun upsertMessage(message: MessageEntity) {
+    override suspend fun upsertMessage(message: MessageEntity) {
         localDataSource.upsertMessage(message)
     }
 
@@ -31,7 +32,7 @@ class MessageRepositoryImpl(
      * @param id 消息 ID
      * @return 消息实体，如果不存在则返回 null
      */
-    suspend fun getMessage(id: String): MessageEntity? {
+    override suspend fun getMessage(id: String): MessageEntity? {
         return localDataSource.getMessage(id)
     }
 
@@ -42,7 +43,7 @@ class MessageRepositoryImpl(
      * @param sessionId 会话 ID
      * @return 消息列表的 Flow
      */
-    fun observeMessages(sessionId: String): Flow<List<MessageEntity>> {
+    override fun observeMessages(sessionId: String): Flow<List<MessageEntity>> {
         return localDataSource.observeMessages(sessionId)
     }
 
@@ -54,7 +55,7 @@ class MessageRepositoryImpl(
      * @param pageSize 每页大小
      * @return 消息列表
      */
-    suspend fun getMessagesByPage(sessionId: String, page: Int, pageSize: Int): List<MessageEntity> {
+    override suspend fun getMessagesByPage(sessionId: String, page: Int, pageSize: Int): List<MessageEntity> {
         return localDataSource.getMessagesByPage(sessionId, page, pageSize)
     }
 
@@ -63,7 +64,7 @@ class MessageRepositoryImpl(
      * 
      * @param sessionId 会话 ID
      */
-    suspend fun deleteMessagesBySession(sessionId: String) {
+    override suspend fun deleteMessagesBySession(sessionId: String) {
         localDataSource.deleteMessagesBySession(sessionId)
     }
 
@@ -72,7 +73,7 @@ class MessageRepositoryImpl(
      * 
      * @param messageId 消息 ID
      */
-    suspend fun deleteMessage(messageId: String) {
+    override suspend fun deleteMessage(messageId: String) {
         localDataSource.deleteMessage(messageId)
     }
 }

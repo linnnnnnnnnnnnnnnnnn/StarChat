@@ -78,6 +78,7 @@ import androidx.compose.ui.text.TextRange
 import java.util.UUID
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
+import com.example.star.aiwork.data.repository.MessageRepositoryImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -437,8 +438,15 @@ fun ConversationPreview() {
         val remoteDataSource = StreamingChatRemoteDataSource(sseClient)
         val aiRepository = AiRepositoryImpl(remoteDataSource, okHttpClient)
 
+        // Create DataSources
         val messageLocalDataSource = MessageLocalDataSourceImpl(context)
         val sessionLocalDataSource = com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl(context)
+        val sessionCacheDataSource = com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl()
+        
+        // Create Repositories (for consistency, though not directly used here)
+        val messageRepository = MessageRepositoryImpl(messageLocalDataSource)
+        val sessionRepository = com.example.star.aiwork.data.repository.SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
+        
         val persistenceGateway = MessagePersistenceGatewayImpl(messageLocalDataSource, sessionLocalDataSource)
 
         val sendMessageUseCase = SendMessageUseCase(aiRepository, persistenceGateway, scope)

@@ -27,7 +27,10 @@ import com.example.star.aiwork.data.AgentRepository
 import com.example.star.aiwork.data.UserPreferencesRepository
 import com.example.star.aiwork.data.database.AppDatabase
 import com.example.star.aiwork.data.database.LocalRAGService
+import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
+import com.example.star.aiwork.data.repository.SessionRepositoryImpl
+import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
 import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.session.DeleteAllSessionsUseCase
@@ -384,8 +387,11 @@ class MainViewModel(
                 
                 val ragService = LocalRAGService(application, db.knowledgeDao())
 
+                // Create Repository
                 val sessionLocalDataSource = SessionLocalDataSourceImpl(application)
-                val deleteAllSessionsUseCase = DeleteAllSessionsUseCase(sessionLocalDataSource)
+                val sessionCacheDataSource: SessionCacheDataSource = SessionCacheDataSourceImpl()
+                val sessionRepository = SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
+                val deleteAllSessionsUseCase = DeleteAllSessionsUseCase(sessionRepository)
 
                 return MainViewModel(
                     UserPreferencesRepository(application),
