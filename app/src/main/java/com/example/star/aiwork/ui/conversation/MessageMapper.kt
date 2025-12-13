@@ -22,8 +22,7 @@ class MessageMapper(private val userAuthor: String) {
             content = entity.content,
             timestamp = timeFormatter.format(Date(entity.createdAt)),
             imageUrl = entity.metadata.remoteUrl,
-            // STREAMING 状态表示正在流式生成，应该显示加载状态
-            isLoading = entity.status == MessageStatus.STREAMING || entity.status == MessageStatus.SENDING
+            isLoading = entity.status == MessageStatus.SENDING
         )
     }
 }

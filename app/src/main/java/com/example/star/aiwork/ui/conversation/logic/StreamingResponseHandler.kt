@@ -65,9 +65,13 @@ class StreamingResponseHandler(
                         withContext(Dispatchers.IO) {
                             val existingMessage = messageRepository.getMessage(messageId)
                             if (existingMessage != null) {
+                                // 收到第一个chunk时，将状态从 SENDING 更新为 STREAMING
+                                // 后续chunk保持 STREAMING 状态
+                                val newStatus = MessageStatus.STREAMING
+                                
                                 val updatedEntity = existingMessage.copy(
                                     content = fullResponse,
-                                    status = MessageStatus.STREAMING
+                                    status = newStatus
                                 )
                                 messageRepository.upsertMessage(updatedEntity)
                             }
