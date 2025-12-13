@@ -49,15 +49,13 @@ import kotlinx.coroutines.cancel
 class ConversationUiState(
     channelName: String,
     val channelMembers: Int,
-    initialMessages: List<Message>,
     val coroutineScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 ) {
     // 频道名称使用可变状态，以便根据当前会话动态更新
     var channelName: String by mutableStateOf(channelName)
 
-    // 使用 SnapshotStateList 来存储消息，确保列表变更时能触发 Compose 重组
-    private val _messages: MutableList<Message> = initialMessages.toMutableStateList()
-    val messages: List<Message> = _messages
+    // 注意：消息不再由 UI 状态管理，而是通过 UseCase 从 Repository 订阅
+    // UI 层只负责展示从 Domain 层订阅的消息数据
 
     // 分页加载状态
     var isLoadingMore: Boolean by mutableStateOf(false)
@@ -124,88 +122,8 @@ class ConversationUiState(
      */
     var activeModel: Model? = null
 
-    /**
-     * 添加一条新消息到列表顶部。
-     */
-    fun addMessage(msg: Message) {
-        _messages.add(0, msg) // Add to the beginning of the list
-    }
-
-    /**
-     * 添加历史消息到列表末尾
-     */
-    fun addOlderMessages(olderMessages: List<Message>) {
-        _messages.addAll(olderMessages)
-    }
-
-    /**
-     * 移除列表顶部的一条消息。
-     * 用于在发送失败等场景下回滚 UI。
-     */
-    fun removeFirstMessage() {
-        if (_messages.isNotEmpty()) {
-            _messages.removeAt(0)
-        }
-    }
-
-    /**
-     * 清空所有消息。
-     * 用于在会话切换时清理不属于当前会话的消息。
-     */
-    fun clearMessages() {
-        _messages.clear()
-        isLoadingMore = false
-        allMessagesLoaded = false
-    }
-
-    /**
-     * 将内容追加到最新一条消息中。
-     * 通常用于流式显示 AI 的回复。
-     */
-    fun appendToLastMessage(content: String) {
-        if (_messages.isNotEmpty()) {
-            val lastMsg = _messages[0]
-            _messages[0] = lastMsg.copy(
-                content = lastMsg.content + content,
-                isLoading = false  // ✅ 有内容后，取消加载状态
-            )
-        }
-    }
-
-    /**
-     * ✅ 新增：更新最后一条消息的加载状态
-     */
-    fun updateLastMessageLoadingState(isLoading: Boolean) {
-        if (_messages.isNotEmpty()) {
-            val lastMsg = _messages[0]
-            _messages[0] = lastMsg.copy(isLoading = isLoading)
-        }
-    }
-
-    /**
-     * 移除最后一条助手消息（用于回滚功能）
-     */
-    fun removeLastAssistantMessage(authorMe: String) {
-        val index = _messages.indexOfFirst {
-            it.author != authorMe && it.author != "System"
-        }
-        if (index >= 0) {
-            _messages.removeAt(index)
-        }
-    }
-
-    /**
-     * 替换最后一条消息的内容（用于非流式模式下取消时清空内容）
-     */
-    fun replaceLastMessageContent(newContent: String) {
-        if (_messages.isNotEmpty()) {
-            val lastMsg = _messages[0]
-            _messages[0] = lastMsg.copy(
-                content = newContent,
-                isLoading = false
-            )
-        }
-    }
+    // 注意：所有消息管理方法已移除
+    // 消息的增删改查应该通过 UseCase 操作 Repository，UI 只负责订阅和展示
 
     /**
      * 取消该会话的所有协程。

@@ -11,7 +11,7 @@ interface MessageDao {
     @Upsert
     suspend fun upsertMessage(message: MessageEntity)
 
-    @Query("SELECT * FROM messages WHERE sessionId = :sessionId ORDER BY createdAt ASC")
+    @Query("SELECT * FROM messages WHERE sessionId = :sessionId ORDER BY createdAt DESC")
     fun getMessages(sessionId: String): Flow<List<MessageEntity>>
 
     @Query("DELETE FROM messages WHERE sessionId = :sessionId")

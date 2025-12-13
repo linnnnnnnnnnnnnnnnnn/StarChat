@@ -5,6 +5,12 @@ import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.repository.MessageRepository
+import com.example.star.aiwork.domain.model.MessageEntity
+import com.example.star.aiwork.domain.model.MessageRole
+import com.example.star.aiwork.domain.model.MessageType
+import com.example.star.aiwork.domain.model.MessageStatus
+import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
 import kotlinx.coroutines.Dispatchers
@@ -15,9 +21,30 @@ import java.util.UUID
 class AutoLoopHandler(
     private val uiState: ConversationUiState,
     private val sendMessageUseCase: SendMessageUseCase,
+    private val messageRepository: MessageRepository?,
     private val getProviderSettings: () -> List<ProviderSetting>,
+    private val sessionId: String,
     private val timeNow: String
 ) {
+    
+    private suspend fun saveMessageToRepository(message: Message): String {
+        val messageId = java.util.UUID.randomUUID().toString()
+        val role = when (message.author) {
+            "System", "system" -> MessageRole.SYSTEM
+            else -> MessageRole.USER
+        }
+        val entity = MessageEntity(
+            id = messageId,
+            sessionId = sessionId,
+            role = role,
+            type = MessageType.SYSTEM,
+            content = message.content,
+            createdAt = System.currentTimeMillis(),
+            status = MessageStatus.DONE
+        )
+        messageRepository?.upsertMessage(entity)
+        return messageId
+    }
     suspend fun handleAutoLoop(
         fullResponse: String,
         loopCount: Int,
@@ -97,13 +124,13 @@ class AutoLoopHandler(
                     )
                 }
             } catch (e: Exception) {
-                 withContext(Dispatchers.Main) {
-                    uiState.addMessage(Message("System", "Auto-loop planner failed: ${e.message}", timeNow))
+                 withContext(Dispatchers.IO) {
+                    saveMessageToRepository(Message("System", "Auto-loop planner failed: ${e.message}", timeNow))
                 }
             }
         } else {
-             withContext(Dispatchers.Main) {
-                uiState.addMessage(Message("System", "Auto-loop planner configuration invalid or provider not found.", timeNow))
+             withContext(Dispatchers.IO) {
+                saveMessageToRepository(Message("System", "Auto-loop planner configuration invalid or provider not found.", timeNow))
             }
         }
     }

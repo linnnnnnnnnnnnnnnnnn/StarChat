@@ -10,14 +10,19 @@ import com.example.star.aiwork.domain.model.ModelType
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
-import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.repository.SessionRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
+import com.example.star.aiwork.domain.repository.MessageRepository
+import com.example.star.aiwork.domain.model.MessageEntity
+import com.example.star.aiwork.domain.model.MessageType
+import com.example.star.aiwork.domain.model.MessageStatus
+import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.ui.conversation.logic.BufferedMemoryItem
 import com.example.star.aiwork.ui.conversation.logic.MemoryBuffer
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
@@ -34,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,7 +68,8 @@ class ConversationLogic(
     private val generateChatNameUseCase: GenerateChatNameUseCase? = null,
     private val sessionId: String,
     private val getProviderSettings: () -> List<ProviderSetting>,
-    private val persistenceGateway: MessagePersistenceGateway? = null,
+    private val messageRepository: MessageRepository? = null,
+    private val sessionRepository: SessionRepository? = null,
     private val onRenameSession: (sessionId: String, newName: String) -> Unit,
     private val onPersistNewChatSession: suspend (sessionId: String) -> Unit = { },
     private val isNewChat: (sessionId: String) -> Boolean = { false },
@@ -86,12 +93,70 @@ class ConversationLogic(
     // 标记是否已被取消，用于非流式模式下避免显示已收集的内容
     @Volatile private var isCancelled = false
     
+    // 当前正在流式生成的消息 ID（用于更新消息内容）
+    private var currentStreamingMessageId: String? = null
+
+    /**
+     * 将 UI 层的 Message 转换为 MessageEntity 并保存到 Repository
+     * @param message 要保存的消息
+     * @param createdAt 可选的时间戳，如果不提供则使用当前时间
+     */
+    private suspend fun saveMessageToRepository(message: Message, createdAt: Long? = null): String {
+        val messageId = UUID.randomUUID().toString()
+        val role = when (message.author) {
+            authorMe -> MessageRole.USER
+            "AI", "assistant", "model" -> MessageRole.ASSISTANT
+            "System", "system" -> MessageRole.SYSTEM
+            else -> MessageRole.USER
+        }
+        val type = when {
+            message.imageUrl != null -> MessageType.IMAGE
+            role == MessageRole.SYSTEM -> MessageType.SYSTEM
+            else -> MessageType.TEXT
+        }
+        val status = when {
+            message.isLoading -> MessageStatus.STREAMING
+            else -> MessageStatus.DONE
+        }
+        
+        val entity = MessageEntity(
+            id = messageId,
+            sessionId = sessionId,
+            role = role,
+            type = type,
+            content = message.content,
+            metadata = MessageMetadata(
+                remoteUrl = message.imageUrl,
+                localFilePath = message.imageUrl
+            ),
+            createdAt = createdAt ?: System.currentTimeMillis(),
+            status = status
+        )
+        
+        messageRepository?.upsertMessage(entity)
+        return messageId
+    }
+
+    /**
+     * 更新 Repository 中的消息内容（用于流式输出）
+     */
+    private suspend fun updateMessageInRepository(messageId: String, content: String, isLoading: Boolean = false) {
+        val existingMessage = messageRepository?.getMessage(messageId)
+        if (existingMessage != null) {
+            val updatedEntity = existingMessage.copy(
+                content = content,
+                status = if (isLoading) MessageStatus.STREAMING else MessageStatus.DONE
+            )
+            messageRepository.upsertMessage(updatedEntity)
+        }
+    }
 
     // Handlers
     private val imageGenerationHandler = ImageGenerationHandler(
         uiState = uiState,
         imageGenerationUseCase = imageGenerationUseCase,
-        persistenceGateway = persistenceGateway,
+        messageRepository = messageRepository,
+        sessionRepository = sessionRepository,
         sessionId = sessionId,
         timeNow = timeNow,
         onSessionUpdated = onSessionUpdated
@@ -99,25 +164,32 @@ class ConversationLogic(
 
     private val streamingResponseHandler = StreamingResponseHandler(
         uiState = uiState,
-        persistenceGateway = persistenceGateway,
+        messageRepository = messageRepository,
+        sessionRepository = sessionRepository,
         sessionId = sessionId,
         timeNow = timeNow,
-        onSessionUpdated = onSessionUpdated
+        onSessionUpdated = onSessionUpdated,
+        onMessageIdCreated = { messageId -> currentStreamingMessageId = messageId },
+        getCurrentMessageId = { currentStreamingMessageId }
     )
 
     private val rollbackHandler = RollbackHandler(
         uiState = uiState,
         rollbackMessageUseCase = rollbackMessageUseCase,
+        messageRepository = messageRepository,
         streamingResponseHandler = streamingResponseHandler,
         sessionId = sessionId,
         authorMe = authorMe,
-        timeNow = timeNow
+        timeNow = timeNow,
+        onMessageIdCreated = { messageId -> currentStreamingMessageId = messageId }
     )
 
     private val autoLoopHandler = AutoLoopHandler(
         uiState = uiState,
         sendMessageUseCase = sendMessageUseCase,
+        messageRepository = messageRepository,
         getProviderSettings = getProviderSettings,
+        sessionId = sessionId,
         timeNow = timeNow
     )
 
@@ -253,31 +325,26 @@ class ConversationLogic(
         
         // 根据流式模式决定处理方式
         val currentContent: String
-        withContext(Dispatchers.Main) {
+        val messageId = currentStreamingMessageId
+        if (messageId != null) {
             if (uiState.streamResponse) {
                 // 流式模式：在消息末尾追加取消提示
-                uiState.appendToLastMessage("\n（已取消生成）")
-                uiState.updateLastMessageLoadingState(false)
-                // 获取当前消息内容（包含取消提示）
-                val lastMessage = uiState.messages.firstOrNull { it.author == "AI" }
-                currentContent = lastMessage?.content ?: ""
+                val existingMessage = messageRepository?.getMessage(messageId)
+                currentContent = (existingMessage?.content ?: "") + "\n（已取消生成）"
             } else {
                 // 非流式模式：清空已收集的内容，只显示取消提示
-                uiState.replaceLastMessageContent("（已取消生成）")
-                uiState.updateLastMessageLoadingState(false)
                 currentContent = "（已取消生成）"
             }
-        }
-        
-        // 保存当前内容到数据库（包含取消提示）
-        if (currentContent.isNotEmpty()) {
-            persistenceGateway?.replaceLastAssistantMessage(
-                sessionId,
-                ChatDataItem(
-                    role = MessageRole.ASSISTANT.name.lowercase(),
-                    content = currentContent
-                )
-            )
+            
+            // 更新 Repository 中的消息（包含取消提示）
+            if (currentContent.isNotEmpty()) {
+                updateMessageInRepository(messageId, currentContent, isLoading = false)
+                // 消息已经通过 updateMessageInRepository() 保存到数据库
+                // 更新会话的 updatedAt 时间戳
+                sessionRepository?.updateSessionTimestamp(sessionId)
+            }
+        } else {
+            currentContent = ""
         }
         
         // 使用 uiState 中保存的 activeTaskId（即使 ConversationLogic 重新创建也能恢复）
@@ -318,118 +385,178 @@ class ConversationLogic(
         retrieveKnowledge: suspend (String) -> String = { "" },
         isRetry: Boolean = false
     ) {
+        // ========== 打印当前会话的数据库和缓存信息 ==========
+        withContext(Dispatchers.IO) {
+            try {
+                // 从数据库获取消息
+                val dbMessages = messageRepository?.observeMessages(sessionId)?.first() ?: emptyList()
+                // 从缓存获取消息（非 suspend 操作，可以直接调用）
+                val cachedMessages = messageRepository?.getCachedMessages(sessionId)
+                
+                Log.d("ConversationLogic", "=".repeat(100))
+                Log.d("ConversationLogic", "📤 [用户点击发送] 会话ID: $sessionId")
+                Log.d("ConversationLogic", "📝 输入内容: ${inputContent.take(100)}${if (inputContent.length > 100) "..." else ""}")
+                Log.d("ConversationLogic", "")
+                Log.d("ConversationLogic", "💾 [数据库] 消息总数: ${dbMessages.size}")
+                if (dbMessages.isNotEmpty()) {
+                    dbMessages.forEachIndexed { index, msg ->
+                        val contentPreview = msg.content.take(50).let { 
+                            if (msg.content.length > 50) "$it..." else it 
+                        }
+                        Log.d("ConversationLogic", "  [$index] ID=${msg.id.take(8)}... | Role=${msg.role.name} | Status=${msg.status.name} | Content=\"$contentPreview\" | CreatedAt=${msg.createdAt}")
+                    }
+                } else {
+                    Log.d("ConversationLogic", "  (数据库中没有消息)")
+                }
+                Log.d("ConversationLogic", "")
+                Log.d("ConversationLogic", "🗂️  [缓存] 消息总数: ${cachedMessages?.size ?: 0}")
+                if (cachedMessages != null && cachedMessages.isNotEmpty()) {
+                    cachedMessages.forEachIndexed { index, msg ->
+                        val contentPreview = msg.content.take(50).let { 
+                            if (msg.content.length > 50) "$it..." else it 
+                        }
+                        Log.d("ConversationLogic", "  [$index] ID=${msg.id.take(8)}... | Role=${msg.role.name} | Status=${msg.status.name} | Content=\"$contentPreview\" | CreatedAt=${msg.createdAt}")
+                    }
+                } else {
+                    Log.d("ConversationLogic", "  (缓存中没有消息)")
+                }
+                Log.d("ConversationLogic", "")
+                // 检查数据库和缓存是否一致
+                val dbIds = dbMessages.map { it.id }.toSet()
+                val cachedIds = cachedMessages?.map { it.id }?.toSet() ?: emptySet()
+                val onlyInDb = dbIds - cachedIds
+                val onlyInCache = cachedIds - dbIds
+                if (onlyInDb.isNotEmpty() || onlyInCache.isNotEmpty()) {
+                    Log.d("ConversationLogic", "⚠️  [数据不一致检测]")
+                    if (onlyInDb.isNotEmpty()) {
+                        Log.d("ConversationLogic", "  仅在数据库中: ${onlyInDb.map { it.take(8) + "..." }.joinToString(", ")}")
+                    }
+                    if (onlyInCache.isNotEmpty()) {
+                        Log.d("ConversationLogic", "  仅在缓存中: ${onlyInCache.map { it.take(8) + "..." }.joinToString(", ")}")
+                    }
+                } else {
+                    Log.d("ConversationLogic", "✅ [数据一致性] 数据库和缓存中的消息ID完全一致")
+                }
+                Log.d("ConversationLogic", "=".repeat(100))
+            } catch (e: Exception) {
+                Log.e("ConversationLogic", "❌ [打印消息信息失败] ${e.message}", e)
+            }
+        }
+        // ========== 打印信息结束 ==========
+        
         // Session management (New Chat / Rename)
         if (isNewChat(sessionId)) {
             onPersistNewChatSession(sessionId)
             
             // ADDED: Auto-rename session logic using GenerateChatNameUseCase
             // 只有在新聊天且是第一条用户消息时才自动重命名
-            if (!isAutoTriggered && (uiState.channelName == "New Chat" || uiState.channelName == "新聊天" || uiState.channelName == "新会话" || uiState.channelName == "new chat") && uiState.messages.none { it.author == authorMe }) {
-                if (generateChatNameUseCase != null && providerSetting != null && model != null) {
-                    // 使用GenerateChatNameUseCase生成标题
-                    streamingScope.launch(Dispatchers.IO) {
-                        try {
-                        val titleFlow = generateChatNameUseCase(
-                            userMessage = inputContent,
-                            providerSetting = providerSetting,
-                            model = model
-                        )
-                        
-                            var generatedTitle = StringBuilder()
-                            titleFlow
-                                .onCompletion { 
-                                    // 流完成后，持久化生成的标题
-                                    val finalTitle = generatedTitle.toString().trim()
-                                    if (finalTitle.isNotBlank()) {
-                                        // 限制标题长度，避免过长
-                                        val trimmedTitle = finalTitle.take(30).trim()
-                                        withContext(Dispatchers.Main) {
-                                            // 确保UI显示最终处理后的标题（可能和流过程中的显示略有不同）
-                                            uiState.channelName = trimmedTitle
-                                            // 持久化标题到数据库
-                                            onRenameSession(sessionId, trimmedTitle)
-                                            onSessionUpdated(sessionId)
-                                            Log.d("ConversationLogic", "✅ [Auto-Rename] AI生成标题持久化完成: $trimmedTitle")
-                                        }
-                                    } else {
-                                        // 如果AI生成失败，回退到简单截取
-                                        val fallbackTitle = inputContent.take(20).trim()
-                                        if (fallbackTitle.isNotBlank()) {
+            // 注意：现在通过 Repository 检查消息，而不是 uiState.messages
+            if (!isAutoTriggered && (uiState.channelName == "New Chat" || uiState.channelName == "新聊天" || uiState.channelName == "新会话" || uiState.channelName == "new chat")) {
+                // 检查是否已有用户消息（通过 Repository）
+                val hasUserMessage = withContext(Dispatchers.IO) {
+                    messageRepository?.observeMessages(sessionId)?.first()?.any { it.role == MessageRole.USER } ?: false
+                }
+                if (!hasUserMessage) {
+                    if (generateChatNameUseCase != null && providerSetting != null && model != null) {
+                        // 使用GenerateChatNameUseCase生成标题
+                        streamingScope.launch(Dispatchers.IO) {
+                            try {
+                                val titleFlow = generateChatNameUseCase(
+                                    userMessage = inputContent,
+                                    providerSetting = providerSetting,
+                                    model = model
+                                )
+                                
+                                var generatedTitle = StringBuilder()
+                                titleFlow
+                                    .onCompletion { 
+                                        // 流完成后，持久化生成的标题
+                                        val finalTitle = generatedTitle.toString().trim()
+                                        if (finalTitle.isNotBlank()) {
+                                            // 限制标题长度，避免过长
+                                            val trimmedTitle = finalTitle.take(30).trim()
                                             withContext(Dispatchers.Main) {
-                                                // 更新UI显示
-                                                uiState.channelName = fallbackTitle
+                                                // 确保UI显示最终处理后的标题（可能和流过程中的显示略有不同）
+                                                uiState.channelName = trimmedTitle
                                                 // 持久化标题到数据库
-                                                onRenameSession(sessionId, fallbackTitle)
+                                                onRenameSession(sessionId, trimmedTitle)
                                                 onSessionUpdated(sessionId)
-                                                Log.d("ConversationLogic", "✅ [Auto-Rename] 回退标题完成: $fallbackTitle")
+                                                Log.d("ConversationLogic", "✅ [Auto-Rename] AI生成标题持久化完成: $trimmedTitle")
+                                            }
+                                        } else {
+                                            // 如果AI生成失败，回退到简单截取
+                                            val fallbackTitle = inputContent.take(20).trim()
+                                            if (fallbackTitle.isNotBlank()) {
+                                                withContext(Dispatchers.Main) {
+                                                    // 更新UI显示
+                                                    uiState.channelName = fallbackTitle
+                                                    // 持久化标题到数据库
+                                                    onRenameSession(sessionId, fallbackTitle)
+                                                    onSessionUpdated(sessionId)
+                                                    Log.d("ConversationLogic", "✅ [Auto-Rename] 回退标题完成: $fallbackTitle")
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                .collect { chunk ->
-                                    // 实时更新UI中的标题显示（不等待流结束）
-                                    generatedTitle.append(chunk)
-                                    val currentTitle = generatedTitle.toString().trim()
-                                    if (currentTitle.isNotBlank()) {
-                                        // 限制显示长度，避免过长
-                                        val displayTitle = currentTitle.take(30).trim()
-                                        withContext(Dispatchers.Main) {
-                                            uiState.channelName = displayTitle
+                                    .collect { chunk ->
+                                        // 实时更新UI中的标题显示（不等待流结束）
+                                        generatedTitle.append(chunk)
+                                        val currentTitle = generatedTitle.toString().trim()
+                                        if (currentTitle.isNotBlank()) {
+                                            // 限制显示长度，避免过长
+                                            val displayTitle = currentTitle.take(30).trim()
+                                            withContext(Dispatchers.Main) {
+                                                uiState.channelName = displayTitle
+                                            }
                                         }
                                     }
-                                }
-                        } catch (e: Exception) {
-                            // 如果生成标题失败，回退到简单截取
-                            Log.e("ConversationLogic", "❌ [Auto-Rename] AI生成标题失败: ${e.message}", e)
-                            val fallbackTitle = inputContent.take(20).trim()
-                            if (fallbackTitle.isNotBlank()) {
-                                withContext(Dispatchers.Main) {
-                                    // 更新UI显示
-                                    uiState.channelName = fallbackTitle
-                                    // 持久化标题到数据库
-                                    onRenameSession(sessionId, fallbackTitle)
-                                    onSessionUpdated(sessionId)
-                                    Log.d("ConversationLogic", "✅ [Auto-Rename] 回退标题完成: $fallbackTitle")
+                            } catch (e: Exception) {
+                                // 如果生成标题失败，回退到简单截取
+                                Log.e("ConversationLogic", "❌ [Auto-Rename] AI生成标题失败: ${e.message}", e)
+                                val fallbackTitle = inputContent.take(20).trim()
+                                if (fallbackTitle.isNotBlank()) {
+                                    withContext(Dispatchers.Main) {
+                                        // 更新UI显示
+                                        uiState.channelName = fallbackTitle
+                                        // 持久化标题到数据库
+                                        onRenameSession(sessionId, fallbackTitle)
+                                        onSessionUpdated(sessionId)
+                                        Log.d("ConversationLogic", "✅ [Auto-Rename] 回退标题完成: $fallbackTitle")
+                                    }
                                 }
                             }
                         }
-                    }
-                } else {
-                    // 如果没有提供GenerateChatNameUseCase，使用简单的截取方式
-                    val newTitle = inputContent.take(20).trim()
-                    if (newTitle.isNotBlank()) {
-                        onRenameSession(sessionId, newTitle)
-                        onSessionUpdated(sessionId)
-                        Log.d("ConversationLogic", "✅ [Auto-Rename] 简单标题完成，已调用 onSessionUpdated")
+                    } else {
+                        // 如果没有提供GenerateChatNameUseCase，使用简单的截取方式
+                        val newTitle = inputContent.take(20).trim()
+                        if (newTitle.isNotBlank()) {
+                            onRenameSession(sessionId, newTitle)
+                            onSessionUpdated(sessionId)
+                            Log.d("ConversationLogic", "✅ [Auto-Rename] 简单标题完成，已调用 onSessionUpdated")
+                        }
                     }
                 }
             }
         }
 
-        // UI Update: Display User Message
-        if (!isRetry) {
-            if (!isAutoTriggered) {
-                val currentImageUri = uiState.selectedImageUri
-                uiState.addMessage(
-                    Message(
-                        author = authorMe,
-                        content = inputContent,
-                        timestamp = timeNow,
-                        imageUrl = currentImageUri?.toString()
-                    )
-                )
-                uiState.selectedImageUri = null
-            } else {
-                uiState.addMessage(Message(authorMe, "[Auto-Loop ${loopCount}] $inputContent", timeNow))
-            }
+        // 1. 先设置加载状态，确保 UI 立即显示加载动画
+        withContext(Dispatchers.Main) {
+            uiState.isGenerating = true
         }
 
-        // 2. Call LLM or Image Generation
+        // 2. Save User Message to Repository
+        // 注意：用户消息的保存现在由 SendMessageUseCase 负责，这里不再重复保存
+        // 但需要处理图片URI和Auto-Loop的情况
+        val userMessageTimestamp = System.currentTimeMillis()
+        if (!isRetry && !isAutoTriggered) {
+            // 清空选中的图片URI（图片会在 SendMessageUseCase 中通过 ChatDataItem 保存）
+            uiState.selectedImageUri = null
+        }
+        // Auto-Loop 的消息会在 SendMessageUseCase 中保存，这里不需要单独处理
+
+        // 3. Call LLM or Image Generation
         if (providerSetting != null && model != null) {
             try {
-                withContext(Dispatchers.Main) {
-                    uiState.isGenerating = true
-                }
                 
                 if (model.type == ModelType.IMAGE) {
                     imageGenerationHandler.generateImage(providerSetting, model, inputContent)
@@ -445,6 +572,8 @@ class ConversationLogic(
                     activeAgent = uiState.activeAgent,
                     retrieveKnowledge = retrieveKnowledge,
                     context = context,
+                    messageRepository = messageRepository,
+                    sessionId = sessionId,
                     computeEmbeddingUseCase = computeEmbeddingUseCase,
                     searchEmbeddingUseCase = searchEmbeddingUseCase,
                     topK = embeddingTopK
@@ -459,9 +588,23 @@ class ConversationLogic(
                     maxTokens = uiState.maxTokens
                 )
 
-                // Add empty AI message placeholder
-                withContext(Dispatchers.Main) {
-                    uiState.addMessage(Message("AI", "", timeNow, isLoading = true))
+                // Add empty AI message placeholder to Repository
+                // 确保 AI 消息的 createdAt 比用户消息晚至少 1 毫秒，保证顺序正确
+                val aiMessageTimestamp = System.currentTimeMillis()
+                currentStreamingMessageId = withContext(Dispatchers.IO) {
+                    val messageId = UUID.randomUUID().toString()
+                    val entity = MessageEntity(
+                        id = messageId,
+                        sessionId = sessionId,
+                        role = MessageRole.ASSISTANT,
+                        type = MessageType.TEXT,
+                        content = "",
+                        metadata = MessageMetadata(),
+                        createdAt = aiMessageTimestamp,
+                        status = MessageStatus.STREAMING
+                    )
+                    messageRepository?.upsertMessage(entity)
+                    messageId
                 }
 
                 val historyChat: List<ChatDataItem> = messagesToSend.dropLast(1).map { message ->
@@ -577,9 +720,9 @@ class ConversationLogic(
                 handleError(e, inputContent, providerSetting, model, isAutoTriggered, loopCount, retrieveKnowledge, isRetry)
             }
         } else {
-             uiState.addMessage(
-                Message("System", "No AI Provider configured.", timeNow)
-            )
+            withContext(Dispatchers.IO) {
+                saveMessageToRepository(Message("System", "No AI Provider configured.", timeNow))
+            }
             uiState.isGenerating = false
         }
     }
@@ -598,10 +741,16 @@ class ConversationLogic(
 
         if (e is CancellationException || e is LlmError.CancelledError) {
             Log.d("ConversationLogic", "⚠️ Error is cancellation related, ignoring.")
+            // 更新消息状态为完成（如果存在流式消息）
+            val messageId = currentStreamingMessageId
+            if (messageId != null) {
+                withContext(Dispatchers.IO) {
+                    updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
+                }
+            }
             withContext(Dispatchers.Main) {
                 uiState.activeTaskId = null
                 uiState.isGenerating = false
-                uiState.updateLastMessageLoadingState(false)
             }
             // 清除任务管理器中的任务引用
             taskManager?.removeTasks(sessionId)
@@ -632,9 +781,12 @@ class ConversationLogic(
 
             if (fallbackProvider != null && fallbackModel != null && !isSameAsCurrent) {
                 Log.i("ConversationLogic", "✅ Triggering configured fallback to ${fallbackProvider.name}...")
-                withContext(Dispatchers.Main) {
-                    uiState.updateLastMessageLoadingState(false)
-                    uiState.addMessage(
+                withContext(Dispatchers.IO) {
+                    val messageId = currentStreamingMessageId
+                    if (messageId != null) {
+                        updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
+                    }
+                    saveMessageToRepository(
                         Message("System", "Request failed (${e.message}). Fallback to ${fallbackProvider.name} (${fallbackModel.displayName})...", timeNow)
                     )
                 }
@@ -660,9 +812,12 @@ class ConversationLogic(
                 val ollamaProvider = getProviderSettings().find { it is ProviderSetting.Ollama }
                 if (ollamaProvider != null && ollamaProvider.models.isNotEmpty()) {
                     Log.i("ConversationLogic", "✅ Triggering default Ollama fallback...")
-                    withContext(Dispatchers.Main) {
-                        uiState.updateLastMessageLoadingState(false)
-                        uiState.addMessage(
+                    withContext(Dispatchers.IO) {
+                        val messageId = currentStreamingMessageId
+                        if (messageId != null) {
+                            updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
+                        }
+                        saveMessageToRepository(
                             Message("System", "Request failed (${e.message}). Fallback to local Ollama...", timeNow)
                         )
                     }
@@ -687,21 +842,25 @@ class ConversationLogic(
         }
 
         Log.e("ConversationLogic", "❌ No fallback triggered. Displaying error message.")
-        withContext(Dispatchers.Main) {
-            uiState.activeTaskId = null
-            uiState.updateLastMessageLoadingState(false)
-            uiState.isGenerating = false
-            // 如果是重试产生的空消息（或第一次尝试），且内容为空，移除它
-            if (uiState.messages.isNotEmpty() && 
-                uiState.messages[0].author == "AI" && 
-                uiState.messages[0].content.isBlank()) {
-                uiState.removeFirstMessage()
+        withContext(Dispatchers.IO) {
+            // 如果是重试产生的空消息，删除它
+            val messageId = currentStreamingMessageId
+            if (messageId != null) {
+                val existingMessage = messageRepository?.getMessage(messageId)
+                if (existingMessage != null && existingMessage.content.isBlank()) {
+                    messageRepository?.deleteMessage(messageId)
+                } else {
+                    // 更新消息状态为完成
+                    updateMessageInRepository(messageId, existingMessage?.content ?: "", isLoading = false)
+                }
             }
             
             val errorMessage = getErrorMessage(e)
-            uiState.addMessage(
-                Message("System", errorMessage, timeNow)
-            )
+            saveMessageToRepository(Message("System", errorMessage, timeNow))
+        }
+        withContext(Dispatchers.Main) {
+            uiState.activeTaskId = null
+            uiState.isGenerating = false
         }
         // 清除任务管理器中的任务引用
         taskManager?.removeTasks(sessionId)

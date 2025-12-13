@@ -6,7 +6,12 @@ import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
-import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
+import com.example.star.aiwork.domain.repository.MessageRepository
+import com.example.star.aiwork.domain.repository.SessionRepository
+import com.example.star.aiwork.domain.model.MessageEntity
+import com.example.star.aiwork.domain.model.MessageType
+import com.example.star.aiwork.domain.model.MessageStatus
+import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
@@ -16,18 +21,52 @@ import kotlinx.coroutines.withContext
 class ImageGenerationHandler(
     private val uiState: ConversationUiState,
     private val imageGenerationUseCase: ImageGenerationUseCase,
-    private val persistenceGateway: MessagePersistenceGateway?,
+    private val messageRepository: MessageRepository?,
+    private val sessionRepository: SessionRepository?,
     private val sessionId: String,
     private val timeNow: String,
     private val onSessionUpdated: suspend (sessionId: String) -> Unit
 ) {
+    
+    private suspend fun saveMessageToRepository(message: Message): String {
+        val messageId = java.util.UUID.randomUUID().toString()
+        val role = when (message.author) {
+            "AI", "assistant", "model" -> MessageRole.ASSISTANT
+            "System", "system" -> MessageRole.SYSTEM
+            else -> MessageRole.USER
+        }
+        val entity = MessageEntity(
+            id = messageId,
+            sessionId = sessionId,
+            role = role,
+            type = if (message.imageUrl != null) MessageType.IMAGE else MessageType.TEXT,
+            content = message.content,
+            metadata = MessageMetadata(remoteUrl = message.imageUrl),
+            createdAt = System.currentTimeMillis(),
+            status = if (message.isLoading) MessageStatus.STREAMING else MessageStatus.DONE
+        )
+        messageRepository?.upsertMessage(entity)
+        return messageId
+    }
+    
+    private suspend fun updateMessageInRepository(messageId: String, content: String, imageUrl: String? = null) {
+        val existingMessage = messageRepository?.getMessage(messageId)
+        if (existingMessage != null) {
+            val updatedEntity = existingMessage.copy(
+                content = content,
+                metadata = existingMessage.metadata.copy(remoteUrl = imageUrl ?: existingMessage.metadata.remoteUrl),
+                status = MessageStatus.DONE
+            )
+            messageRepository.upsertMessage(updatedEntity)
+        }
+    }
     suspend fun generateImage(
         providerSetting: ProviderSetting,
         model: Model,
         prompt: String
     ) {
-        withContext(Dispatchers.Main) {
-            uiState.addMessage(Message("AI", "", timeNow, isLoading = true))
+        val messageId = withContext(Dispatchers.IO) {
+            saveMessageToRepository(Message("AI", "", timeNow, isLoading = true))
         }
 
         val result = imageGenerationUseCase(
@@ -41,8 +80,7 @@ class ImageGenerationHandler(
 
         result.fold(
             onSuccess = { imageResult ->
-                withContext(Dispatchers.Main) {
-                    uiState.updateLastMessageLoadingState(false)
+                withContext(Dispatchers.IO) {
                     val firstImage = imageResult.items.firstOrNull()
                     if (firstImage != null && firstImage.data != null) {
                         val imageUrl = if (firstImage.data.startsWith("http")) {
@@ -50,8 +88,9 @@ class ImageGenerationHandler(
                         } else {
                             "data:${firstImage.mimeType};base64,${firstImage.data}"
                         }
-                        uiState.appendToLastMessage("Generated Image:")
-                        uiState.addMessage(
+                        updateMessageInRepository(messageId, "Generated Image:", imageUrl)
+                        // 创建图片消息
+                        saveMessageToRepository(
                             Message(
                                 author = "AI",
                                 content = "",
@@ -59,31 +98,27 @@ class ImageGenerationHandler(
                                 imageUrl = imageUrl
                             )
                         )
-                        // Persistence
-                        persistenceGateway?.replaceLastAssistantMessage(
-                            sessionId,
-                            ChatDataItem(
-                                role = MessageRole.ASSISTANT.name.lowercase(),
-                                content = "Generated Image:\n[image:$imageUrl]"
-                            )
-                        )
+                        // 消息已经通过 updateMessageInRepository() 和 saveMessageToRepository() 保存到数据库
+                        // 更新会话的 updatedAt 时间戳
+                        sessionRepository?.updateSessionTimestamp(sessionId)
                     } else {
-                        uiState.appendToLastMessage("Failed to generate image: Empty result.")
+                        updateMessageInRepository(messageId, "Failed to generate image: Empty result.")
                     }
-                    uiState.isGenerating = false
                     onSessionUpdated(sessionId)
+                }
+                withContext(Dispatchers.Main) {
+                    uiState.isGenerating = false
                 }
             },
             onFailure = { error ->
-                withContext(Dispatchers.Main) {
-                    uiState.updateLastMessageLoadingState(false)
-                    uiState.isGenerating = false
-                    // Remove empty message if needed
-                    if (uiState.messages.isNotEmpty() && uiState.messages[0].content.isBlank()) {
-                        uiState.removeFirstMessage()
-                    }
+                withContext(Dispatchers.IO) {
+                    // 删除空消息
+                    messageRepository?.deleteMessage(messageId)
                     val errorMessage = getErrorMessage(error)
-                    uiState.addMessage(Message("System", errorMessage, timeNow))
+                    saveMessageToRepository(Message("System", errorMessage, timeNow))
+                }
+                withContext(Dispatchers.Main) {
+                    uiState.isGenerating = false
                 }
                 error.printStackTrace()
             }

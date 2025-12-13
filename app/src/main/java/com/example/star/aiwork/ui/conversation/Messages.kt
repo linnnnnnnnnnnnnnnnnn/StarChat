@@ -96,11 +96,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
-import android.util.Log
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
+import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.onCompletion
@@ -131,16 +131,15 @@ fun Messages(
     // 提取预览卡片
     val previewCards = remember(messages.size, messages.lastOrNull()?.content) {
         val cards = extractPreviewCardsFromMessages(messages)
-        Log.d("Messages", "提取到 ${cards.size} 个预览卡片")
         cards
     }
 
     Box(modifier = modifier) {
-        val authorMe = stringResource(id = R.string.author_me)
+        val authorMe = "me"
 
         // 找到最后一条助手消息（在 reverseLayout 中，第一条消息是最后一条）
         val lastAssistantMessageIndex = messages.indexOfFirst {
-            it.author != authorMe && it.author != "System"
+            it.author != authorMe && it.author != "system"
         }
         val showRegenerateButton = lastAssistantMessageIndex >= 0 &&
                 logic != null &&
@@ -231,7 +230,6 @@ fun Messages(
 
         // 右侧预览边栏
         if (previewCards.isNotEmpty()) {
-            Log.d("Messages", "显示预览边栏，卡片数量: ${previewCards.size}")
             PreviewSidebar(
                 previewCards = previewCards,
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -437,9 +435,9 @@ private fun Timestamp(msg: Message) {
 // 根据消息类型返回不同的气泡形状
 private fun getChatBubbleShape(isUserMe: Boolean): RoundedCornerShape {
     return if (isUserMe) {
-        RoundedCornerShape(20.dp, 4.dp, 20.dp, 20.dp) // 用户消息：右上角直角
+        RoundedCornerShape(20.dp, 20.dp, 20.dp, 20.dp) // 用户消息：右上角直角
     } else {
-        RoundedCornerShape(4.dp, 20.dp, 20.dp, 20.dp) // AI消息：左上角直角
+        RoundedCornerShape(20.dp, 20.dp, 20.dp, 20.dp) // AI消息：左上角直角
     }
 }
 
@@ -1981,12 +1979,6 @@ private fun AnnotatedString.Builder.highlightLine(line: String, keywords: Set<St
     }
 }
 
-@Preview
-@Composable
-fun DayHeaderPrev() {
-    DayHeader("Aug 6")
-}
-
 /**
  * 预览卡片数据类
  */
@@ -2072,7 +2064,6 @@ fun PreviewSidebar(
                                 card = previewCards[index],
                                 onClick = {
                                     selectedCard = previewCards[index]
-                                    Log.d("PreviewSidebar", "点击卡片: ${previewCards[index].title}")
                                 },
                                 uiState = uiState,  // ← 新增参数
                             )
@@ -2165,11 +2156,6 @@ fun PreviewCardItem(
         val provider = uiState?.activeProviderSetting
         val model = uiState?.activeModel
 
-        Log.d("PreviewCardItem", "检查生成条件:")
-        Log.d("PreviewCardItem", "- UseCase: ${useCase != null}")
-        Log.d("PreviewCardItem", "- Provider: ${provider?.name}")
-        Log.d("PreviewCardItem", "- Model: ${model?.modelId}")
-
         // 只有在所有必要组件都存在时才生成标题
         if (useCase != null && provider != null && model != null) {
             try {
@@ -2195,8 +2181,6 @@ fun PreviewCardItem(
                     }
                 }
 
-                Log.d("PreviewCardItem", "开始生成标题，卡片ID: ${card.id}, 类型: ${card.type}")
-
                 // 调用 UseCase 生成标题（完全复用会话标题逻辑）
                 val titleFlow = useCase(
                     userMessage = content,
@@ -2213,11 +2197,9 @@ fun PreviewCardItem(
                         if (finalTitle.isNotBlank()) {
                             // 限制标题长度为10个字
                             displayTitle = finalTitle.take(10).trim()
-                            Log.d("PreviewCardItem", "标题生成完成: $displayTitle")
                         } else {
                             // 生成失败，回退到默认标题
                             displayTitle = card.title
-                            Log.d("PreviewCardItem", "标题生成为空，使用默认: ${card.title}")
                         }
                     }
                     .collect { chunk ->
@@ -2231,12 +2213,10 @@ fun PreviewCardItem(
             } catch (e: Exception) {
                 // 生成失败，回退到默认标题
                 displayTitle = card.title
-                Log.e("PreviewCardItem", "标题生成失败: ${e.message}", e)
             }
         } else {
             // 没有 UseCase 或 Provider/Model，使用默认标题
             displayTitle = card.title
-            Log.d("PreviewCardItem", "缺少生成条件，使用默认标题: ${card.title}")
         }
     }
 
@@ -2298,16 +2278,13 @@ private fun extractPreviewCardsFromMessages(messages: List<Message>): List<Previ
     var tableIndex = 1
     var codeIndex = 1
 
-    Log.d("PreviewCards", "开始提取，消息数量: ${messages.size}")
 
     messages.forEach { message ->
         val content = message.content
-        Log.d("PreviewCards", "处理消息，内容长度: ${content.length}")
 
         // 1. 提取代码块
         val codeBlockRegex = Regex("```([\\w]*)?\\n([\\s\\S]*?)```")
         val codeBlocks = codeBlockRegex.findAll(content).toList()
-        Log.d("PreviewCards", "找到 ${codeBlocks.size} 个代码块")
 
         codeBlocks.forEach { match ->
             val language = match.groupValues[1].takeIf { it.isNotEmpty() } ?: "text"
@@ -2326,13 +2303,11 @@ private fun extractPreviewCardsFromMessages(messages: List<Message>): List<Previ
                         data = code,
                     ),
                 )
-                Log.d("PreviewCards", "添加代码卡片 #${codeIndex - 1}, 语言: $language, 行数: $lineCount")
             }
         }
 
         // 2. 提取表格
         val tableLines = content.lines().filter { it.trim().startsWith("|") }
-        Log.d("PreviewCards", "找到 ${tableLines.size} 行表格")
 
         if (tableLines.size >= 2) {
             // 过滤掉分隔符行（如 |---|---|）
@@ -2357,12 +2332,10 @@ private fun extractPreviewCardsFromMessages(messages: List<Message>): List<Previ
                         data = tableRows,
                     ),
                 )
-                Log.d("PreviewCards", "添加表格卡片 #${tableIndex - 1}, 行数: ${tableRows.size}, 列数: ${tableRows.firstOrNull()?.size ?: 0}")
             }
         }
     }
 
-    Log.d("PreviewCards", "最终提取 ${cards.size} 个卡片")
     return cards
 }
 private val JumpToBottomThreshold = 56.dp

@@ -48,7 +48,6 @@ import com.example.star.aiwork.data.exampleUiState
 import com.example.star.aiwork.data.remote.StreamingChatRemoteDataSource
 import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.domain.model.ProviderSetting
-import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
 import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
@@ -78,8 +77,10 @@ import androidx.compose.ui.text.TextRange
 import java.util.UUID
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
+import com.example.star.aiwork.data.local.datasource.message.MessageCacheDataSource
 import com.example.star.aiwork.data.repository.MessageRepositoryImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
+import com.example.star.aiwork.infra.cache.MessageCacheDataSourceImpl
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -114,6 +115,7 @@ import kotlinx.coroutines.flow.map
 fun ConversationContent(
     uiState: ConversationUiState,
     logic: ConversationLogic,
+    messages: List<Message>,  // 从 UseCase 订阅的消息列表
     navigateToProfile: (String) -> Unit,
     modifier: Modifier = Modifier,
     onNavIconPressed: () -> Unit = { },
@@ -197,14 +199,29 @@ fun ConversationContent(
         )
     }
 
-    val dragAndDropCallback = remember {
+    val providerSetting = remember(providerSettings, activeProviderId) {
+        providerSettings.find { it.id == activeProviderId } ?: providerSettings.firstOrNull()
+    }
+    val model = remember(providerSetting, activeModelId) {
+        providerSetting?.models?.find { it.modelId == activeModelId } ?: providerSetting?.models?.firstOrNull()
+    }
+
+    val dragAndDropCallback = remember(logic, providerSetting, model, retrieveKnowledge, scope) {
         object : DragAndDropTarget {
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 val clipData = event.toAndroidDragEvent().clipData
                 if (clipData.itemCount < 1) return false
-                uiState.addMessage(
-                    Message(authorMe, clipData.getItemAt(0).text.toString(), timeNow),
-                )
+                val text = clipData.getItemAt(0).text.toString()
+                // 通过 logic.processMessage 处理消息，而不是直接操作 UI 状态
+                uiState.isGenerating = true
+                scope.launch {
+                    logic.processMessage(
+                        inputContent = text,
+                        providerSetting = providerSetting,
+                        model = model,
+                        retrieveKnowledge = retrieveKnowledge
+                    )
+                }
                 return true
             }
 
@@ -229,13 +246,6 @@ fun ConversationContent(
                 borderStroke = Color.Transparent
             }
         }
-    }
-
-    val providerSetting = remember(providerSettings, activeProviderId) {
-        providerSettings.find { it.id == activeProviderId } ?: providerSettings.firstOrNull()
-    }
-    val model = remember(providerSetting, activeModelId) {
-        providerSetting?.models?.find { it.modelId == activeModelId } ?: providerSetting?.models?.firstOrNull()
     }
 
     // ====== 语音识别初始化 ======
@@ -290,9 +300,9 @@ fun ConversationContent(
         }
     }
 
-    LaunchedEffect(scrollState) {
+    LaunchedEffect(scrollState, messages) {
         snapshotFlow { scrollState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .map { it == uiState.messages.lastIndex }
+            .map { it == messages.lastIndex }
             .distinctUntilChanged()
             .filter { it }
             .collect {
@@ -331,7 +341,7 @@ fun ConversationContent(
                 }, target = dragAndDropCallback),
         ) {
             Messages(
-                messages = uiState.messages,
+                messages = messages,  // 使用从 UseCase 订阅的消息
                 navigateToProfile = navigateToProfile,
                 modifier = Modifier.weight(1f),
                 scrollState = scrollState,
@@ -341,7 +351,7 @@ fun ConversationContent(
                 retrieveKnowledge = retrieveKnowledge,
                 scope = scope,
                 isGenerating = uiState.isGenerating,
-                uiState = uiState  // ← 新增这一行
+                uiState = uiState
             )
 
             // ====== 修改后的 UserInput 调用 ======
@@ -442,16 +452,15 @@ fun ConversationPreview() {
         val messageLocalDataSource = MessageLocalDataSourceImpl(context)
         val sessionLocalDataSource = com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl(context)
         val sessionCacheDataSource = com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl()
+        val messageCacheDataSource: MessageCacheDataSource = MessageCacheDataSourceImpl()
         
         // Create Repositories (for consistency, though not directly used here)
-        val messageRepository = MessageRepositoryImpl(messageLocalDataSource)
+        val messageRepository = MessageRepositoryImpl(messageCacheDataSource, messageLocalDataSource)
         val sessionRepository = com.example.star.aiwork.data.repository.SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
-        
-        val persistenceGateway = MessagePersistenceGatewayImpl(messageLocalDataSource, sessionLocalDataSource)
 
-        val sendMessageUseCase = SendMessageUseCase(aiRepository, persistenceGateway, scope)
+        val sendMessageUseCase = SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope)
         val pauseStreamingUseCase = PauseStreamingUseCase(aiRepository)
-        val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, persistenceGateway)
+        val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, messageRepository)
         val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
 
         val previewLogic = ConversationLogic(
@@ -465,7 +474,8 @@ fun ConversationPreview() {
             imageGenerationUseCase = imageGenerationUseCase,
             sessionId = "123",
             getProviderSettings = { emptyList() },
-            persistenceGateway = persistenceGateway,
+            messageRepository = messageRepository,
+            sessionRepository = sessionRepository,
             onRenameSession = { _, _ -> },
             onPersistNewChatSession = { },
             isNewChat = { false },
@@ -477,12 +487,13 @@ fun ConversationPreview() {
         ConversationContent(
             uiState = exampleUiState,
             logic = previewLogic,
+            messages = emptyList(),  // 预览时使用空消息列表
             navigateToProfile = { },
             searchQuery = "",
             onSearchQueryChanged = {},
             searchResults = emptyList(),
             onSessionSelected = {},
-            generateChatNameUseCase = null,  // ← 新增参数
+            generateChatNameUseCase = null,
             onLoadMoreMessages = {}
         )
     }

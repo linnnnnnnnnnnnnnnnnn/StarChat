@@ -58,5 +58,30 @@ interface MessageRepository {
      * @param messageId 消息 ID
      */
     suspend fun deleteMessage(messageId: String)
+
+    /**
+     * 获取指定会话中最后一条助手消息。
+     * 
+     * @param sessionId 会话 ID
+     * @return 最后一条助手消息，如果不存在则返回 null
+     */
+    suspend fun getLastAssistantMessage(sessionId: String): MessageEntity?
+
+    /**
+     * 删除指定会话中最后一条助手消息。
+     * 用于回滚操作。
+     * 
+     * @param sessionId 会话 ID
+     * @return 是否成功删除
+     */
+    suspend fun deleteLastAssistantMessage(sessionId: String): Boolean
+
+    /**
+     * 获取指定会话的缓存消息（仅用于调试）。
+     * 
+     * @param sessionId 会话 ID
+     * @return 缓存中的消息列表，如果不存在则返回 null
+     */
+    fun getCachedMessages(sessionId: String): List<MessageEntity>?
 }
 

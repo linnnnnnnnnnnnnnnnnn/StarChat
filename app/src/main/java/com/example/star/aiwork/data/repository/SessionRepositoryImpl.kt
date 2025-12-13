@@ -123,5 +123,17 @@ class SessionRepositoryImpl(
     suspend fun warmupCache(limit: Int = 10) {
         getTopSessions(limit)
     }
+
+    /**
+     * 更新会话的 updatedAt 时间戳。
+     * 
+     * @param sessionId 会话 ID
+     */
+    override suspend fun updateSessionTimestamp(sessionId: String) {
+        val session = getSession(sessionId)
+        if (session != null) {
+            upsertSession(session.copy(updatedAt = System.currentTimeMillis()))
+        }
+    }
 }
 
