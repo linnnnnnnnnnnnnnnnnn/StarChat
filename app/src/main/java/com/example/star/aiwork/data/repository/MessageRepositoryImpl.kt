@@ -42,12 +42,14 @@ class MessageRepositoryImpl(
                 if (it.id == message.id) message else it
             }.let { list ->
                 if (cachedMessages.none { it.id == message.id }) {
-                    // 如果是新消息，添加到列表
-                    list + message
+                    // 如果是新消息，新消息的 createdAt 总是最新的（System.currentTimeMillis()）
+                    // 由于列表是降序排序（最新的在前），直接添加到列表前面
+                    listOf(message) + list
                 } else {
+                    // 如果是更新现有消息，理论上顺序不变，但为了健壮性仍排序
                     list
                 }
-            }
+            }.sortedByDescending { it.createdAt }
             cacheDataSource.putMessages(message.sessionId, updatedMessages)
         }
     }
@@ -84,14 +86,14 @@ class MessageRepositoryImpl(
                 // 先从缓存读取初始值
                 val cached = cacheDataSource.getMessages(sessionId)
                 if (cached != null) {
-                    // 确保缓存中的消息也按 createdAt 排序
-                    emit(cached.sortedBy { it.createdAt })
+                    // 缓存中的数据应该已经是降序的，直接使用（避免重复排序）
+                    emit(cached)
                 }
             }
             .onEach { messages ->
-                // 数据库变化时更新缓存，确保缓存中的消息也按 createdAt 排序
-                val sortedMessages = messages.sortedBy { it.createdAt }
-                cacheDataSource.putMessages(sessionId, sortedMessages)
+                // 数据库查询已经是降序（ORDER BY createdAt DESC），直接使用，避免重复排序
+                // 更新缓存时保持降序（数据库返回的已经是降序）
+                cacheDataSource.putMessages(sessionId, messages)
             }
     }
 
@@ -131,7 +133,10 @@ class MessageRepositoryImpl(
         cacheDataSource.getAllSessionIds().forEach { sessionId ->
             val cachedMessages = cacheDataSource.getMessages(sessionId)
             if (cachedMessages != null && cachedMessages.any { it.id == messageId }) {
+                // 删除消息后，剩余消息的相对顺序保持不变，理论上不需要排序
+                // 但为了健壮性（防止缓存数据可能被外部修改），仍进行排序
                 val updatedMessages = cachedMessages.filter { it.id != messageId }
+                    .sortedByDescending { it.createdAt }
                 if (updatedMessages.isEmpty()) {
                     cacheDataSource.removeMessages(sessionId)
                 } else {
@@ -151,6 +156,7 @@ class MessageRepositoryImpl(
     suspend fun warmupCache(sessionId: String, limit: Int = 100) {
         val messages = localDataSource.getMessagesByPage(sessionId, 0, limit)
         if (messages.isNotEmpty()) {
+            // 数据库查询已经是降序（ORDER BY createdAt DESC），直接使用，避免重复排序
             cacheDataSource.putMessages(sessionId, messages)
         }
     }

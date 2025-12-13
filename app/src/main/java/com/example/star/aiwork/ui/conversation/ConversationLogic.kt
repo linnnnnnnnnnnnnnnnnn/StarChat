@@ -588,25 +588,6 @@ class ConversationLogic(
                     maxTokens = uiState.maxTokens
                 )
 
-                // Add empty AI message placeholder to Repository
-                // 确保 AI 消息的 createdAt 比用户消息晚至少 1 毫秒，保证顺序正确
-                val aiMessageTimestamp = System.currentTimeMillis()
-                currentStreamingMessageId = withContext(Dispatchers.IO) {
-                    val messageId = UUID.randomUUID().toString()
-                    val entity = MessageEntity(
-                        id = messageId,
-                        sessionId = sessionId,
-                        role = MessageRole.ASSISTANT,
-                        type = MessageType.TEXT,
-                        content = "",
-                        metadata = MessageMetadata(),
-                        createdAt = aiMessageTimestamp,
-                        status = MessageStatus.STREAMING
-                    )
-                    messageRepository?.upsertMessage(entity)
-                    messageId
-                }
-
                 val historyChat: List<ChatDataItem> = messagesToSend.dropLast(1).map { message ->
                     MessageConstructionHelper.toChatDataItem(message)
                 }
@@ -665,6 +646,10 @@ class ConversationLogic(
                     providerSetting = providerSetting,
                     params = params
                 )
+
+                // 使用 SendMessageUseCase 返回的 ASSISTANT 消息ID
+                // 业务逻辑已统一在 SendMessageUseCase 中处理
+                currentStreamingMessageId = sendResult.assistantMessageId
 
                 // 保存 taskId 到 uiState 中，这样即使 ConversationLogic 重新创建也能恢复
                 withContext(Dispatchers.Main) {

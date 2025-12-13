@@ -325,8 +325,9 @@ class ConversationFragment : Fragment() {
         }
 
         // 将 MessageStatus 转换为 isLoading 字段
-        // STREAMING 状态表示正在流式生成，应该显示加载状态
-        val isLoading = entity.status == com.example.star.aiwork.domain.model.MessageStatus.STREAMING
+        // SENDING 状态表示正在等待模型回复，显示加载动画
+        // 收到第一个chunk后，状态会更新为 STREAMING，加载动画消失
+        val isLoading = entity.status == com.example.star.aiwork.domain.model.MessageStatus.SENDING
 
         return Message(
             author = author,

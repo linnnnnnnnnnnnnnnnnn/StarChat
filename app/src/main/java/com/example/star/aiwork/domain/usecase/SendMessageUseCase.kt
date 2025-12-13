@@ -13,6 +13,7 @@ import com.example.star.aiwork.domain.repository.MessageRepository
 import com.example.star.aiwork.domain.repository.SessionRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
@@ -30,7 +31,8 @@ class SendMessageUseCase(
 
     data class Output(
         val stream: Flow<String>,
-        val taskId: String
+        val taskId: String,
+        val assistantMessageId: String  // 返回创建的 ASSISTANT 消息ID
     )
 
     operator fun invoke(
@@ -41,26 +43,37 @@ class SendMessageUseCase(
         params: TextGenerationParams,
         taskId: String = UUID.randomUUID().toString()
     ): Output {
+        // 创建用户消息
+        val userEntity = chatDataItemToMessageEntity(sessionId, userMessage)
+        val userTimestamp = userEntity.createdAt
+        
+        // 占位的 assistant message，等待流式结果补充
+        // 确保 ASSISTANT 消息的 createdAt 比 USER 消息晚至少 1 毫秒，保证顺序正确
+        val assistantEntity = chatDataItemToMessageEntity(
+            sessionId,
+            ChatDataItem(role = MessageRole.ASSISTANT.name.lowercase(), content = "")
+        ).copy(
+            createdAt = userTimestamp + 1
+        )
+        
+        // 异步保存消息到数据库，不阻塞调用线程
         scope.launch(Dispatchers.IO) {
-            // 保存用户消息
-            val userEntity = chatDataItemToMessageEntity(sessionId, userMessage)
             messageRepository.upsertMessage(userEntity)
-            sessionRepository.updateSessionTimestamp(sessionId)
-            
-            // 占位的 assistant message，等待流式结果补充
-            val assistantEntity = chatDataItemToMessageEntity(
-                sessionId,
-                ChatDataItem(role = MessageRole.ASSISTANT.name.lowercase(), content = "")
-            )
             messageRepository.upsertMessage(assistantEntity)
+            sessionRepository.updateSessionTimestamp(sessionId)
         }
 
+        // 立即返回，不等待数据库操作完成
         val stream = aiRepository.streamChat(history + userMessage, providerSetting, params, taskId)
             .onStart {
                 // 可以在此通知 UI 启动中
             }
 
-        return Output(stream = stream, taskId = taskId)
+        return Output(
+            stream = stream,
+            taskId = taskId,
+            assistantMessageId = assistantEntity.id
+        )
     }
 
     /**

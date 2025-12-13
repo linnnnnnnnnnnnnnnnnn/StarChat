@@ -324,7 +324,7 @@ fun AuthorAndTextMessage(
         // 在消息气泡底部显示操作按钮（水平并排）
         // 排列顺序：复制 + 点赞 + 点踩 + 重新生成 + 更多操作
         // 当 isGenerating 为 true 时，不显示功能栏
-        if (!isUserMe && msg.author != "System" && !isGenerating) {
+        if (!isUserMe && msg.author != "system" && !isGenerating) {
             val clipboardManager = LocalClipboardManager.current
             val showCopyButton = isPureTextContent(msg.content) && msg.content.isNotEmpty()
             val showRegenerate = isLastAssistantMessage && showRegenerateButton
@@ -481,7 +481,7 @@ fun ChatItemBubble(
     isUserMe: Boolean,
     authorClicked: (String) -> Unit,
 ) {
-    val isSystemMessage = message.author == "System"
+    val isSystemMessage = message.author == "system"
 
     // 现代化配色方案
     val backgroundBubbleColor = when {
@@ -583,7 +583,7 @@ fun MarkdownMessage(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
-    val isSystemMessage = message.author == "System"
+    val isSystemMessage = message.author == "system"
 
     val textColor = when {
         isSystemMessage -> Color.Gray
