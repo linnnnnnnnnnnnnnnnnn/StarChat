@@ -8,11 +8,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.example.star.aiwork.data.local.datasource.draft.DraftLocalDataSourceImpl
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
+import com.example.star.aiwork.data.local.datasource.message.MessageCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
 import com.example.star.aiwork.data.repository.DraftRepositoryImpl
 import com.example.star.aiwork.data.repository.MessageRepositoryImpl
 import com.example.star.aiwork.data.repository.SessionRepositoryImpl
+import com.example.star.aiwork.infra.cache.MessageCacheDataSourceImpl
 import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
 import com.example.star.aiwork.domain.model.MessageEntity
 import com.example.star.aiwork.domain.model.MessageMetadata
@@ -110,7 +112,6 @@ class ChatViewModel(
             ConversationUiState(
                 channelName = name.ifBlank { "新对话" },
                 channelMembers = 1,
-                initialMessages = emptyList(),
                 coroutineScope = sessionScope
             )
         }
@@ -356,10 +357,10 @@ class ChatViewModel(
 
             uiState.isLoadingMore = true
 
+            // 注意：分页加载的消息已经在数据库中，observeMessages 会自动更新 UI
+            // 这里只需要更新分页状态
             val olderMessages = getMessagesByPageUseCase(session.id, paginator.currentPage, 10)
             if (olderMessages.isNotEmpty()) {
-                val messageMapper = MessageMapper("me")
-                uiState.addOlderMessages(olderMessages.map(messageMapper::toUiModel))
                 paginator.currentPage++
             } else {
                 paginator.allMessagesLoaded = true
@@ -491,10 +492,11 @@ class ChatViewModel(
                 val messageLocalDataSource = MessageLocalDataSourceImpl(application)
                 val draftLocalDataSource = DraftLocalDataSourceImpl(application)
                 val sessionCacheDataSource: SessionCacheDataSource = SessionCacheDataSourceImpl()
+                val messageCacheDataSource: MessageCacheDataSource = MessageCacheDataSourceImpl()
 
                 // Create Repositories
                 val sessionRepository = SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
-                val messageRepository = MessageRepositoryImpl(messageLocalDataSource)
+                val messageRepository = MessageRepositoryImpl(messageCacheDataSource, messageLocalDataSource)
                 val draftRepository = DraftRepositoryImpl(draftLocalDataSource)
 
                 // Create UseCases

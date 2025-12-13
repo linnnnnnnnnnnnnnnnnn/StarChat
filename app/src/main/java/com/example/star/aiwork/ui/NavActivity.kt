@@ -171,18 +171,11 @@ class NavActivity : AppCompatActivity() {
                             }
                         },
                         onAgentClicked = { agent ->
-                            // 当点击 Agent 时，将其系统提示词作为系统消息添加到当前对话中
-                            // 同时更新 UI 状态中的 activeAgent，以便后续请求带上此 Prompt
+                            // 当点击 Agent 时，更新 UI 状态中的 activeAgent，以便后续请求带上此 Prompt
+                            // 注意：系统提示词会在后续的 AI 请求中自动使用，不需要单独添加系统消息
                             
                             currentSession?.let { session ->
                                 val uiState = chatViewModel.getOrCreateSessionUiState(session.id, session.name)
-                                uiState.addMessage(
-                                    Message(
-                                        author = "System",
-                                        content = "Applied Agent: ${agent.name}\n${agent.systemPrompt}",
-                                        timestamp = "Now"
-                                    )
-                                )
                                 uiState.activeAgent = agent
                                 
                                 // 保存关联关系到数据库

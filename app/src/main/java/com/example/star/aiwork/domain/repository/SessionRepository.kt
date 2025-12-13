@@ -60,5 +60,12 @@ interface SessionRepository {
      * @return 搜索结果列表的 Flow
      */
     fun searchSessions(query: String): Flow<List<SessionEntity>>
+
+    /**
+     * 更新会话的 updatedAt 时间戳。
+     * 
+     * @param sessionId 会话 ID
+     */
+    suspend fun updateSessionTimestamp(sessionId: String)
 }
 

@@ -44,7 +44,6 @@ import java.util.Date
 import java.util.Locale
 import com.example.star.aiwork.data.remote.StreamingChatRemoteDataSource
 import com.example.star.aiwork.data.repository.AiRepositoryImpl
-import com.example.star.aiwork.data.repository.MessagePersistenceGatewayImpl
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
 import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
@@ -99,7 +98,6 @@ class ConversationFragment : Fragment() {
 
                 val currentSession by chatViewModel.currentSession.collectAsStateWithLifecycle()
                 val sessions by chatViewModel.sessions.collectAsStateWithLifecycle()
-                val messagesFromDb by chatViewModel.messages.collectAsStateWithLifecycle()
                 val searchQuery by chatViewModel.searchQuery.collectAsStateWithLifecycle()
                 val searchResults by chatViewModel.searchResults.collectAsStateWithLifecycle()
 
@@ -109,8 +107,7 @@ class ConversationFragment : Fragment() {
                         chatViewModel.getOrCreateSessionUiState(it.id, it.name)
                     } ?: ConversationUiState(
                         channelName = "新对话",
-                        channelMembers = 1,
-                        initialMessages = emptyList()
+                        channelMembers = 1
                     )
                 }
 
@@ -123,24 +120,24 @@ class ConversationFragment : Fragment() {
                 val messageLocalDataSource = remember(context) { MessageLocalDataSourceImpl(context) }
                 val sessionLocalDataSource = remember(context) { SessionLocalDataSourceImpl(context) }
                 val sessionCacheDataSource = remember { SessionCacheDataSourceImpl() }
+                val messageCacheDataSource = remember { com.example.star.aiwork.infra.cache.MessageCacheDataSourceImpl() }
                 
                 // Create Repositories
-                val messageRepository = remember(messageLocalDataSource) { MessageRepositoryImpl(messageLocalDataSource) }
+                val messageRepository = remember(messageCacheDataSource, messageLocalDataSource) { 
+                    MessageRepositoryImpl(messageCacheDataSource, messageLocalDataSource) 
+                }
                 val sessionRepository = remember(sessionCacheDataSource, sessionLocalDataSource) {
                     SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
                 }
                 
-                val messagePersistenceGateway = remember(messageLocalDataSource, sessionLocalDataSource) {
-                    MessagePersistenceGatewayImpl(messageLocalDataSource, sessionLocalDataSource)
-                }
-                val sendMessageUseCase = remember(aiRepository, messagePersistenceGateway, scope) {
-                    SendMessageUseCase(aiRepository, messagePersistenceGateway, scope)
+                val sendMessageUseCase = remember(aiRepository, messageRepository, sessionRepository, scope) {
+                    SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope)
                 }
                 val pauseStreamingUseCase = remember(aiRepository) {
                     PauseStreamingUseCase(aiRepository)
                 }
-                val rollbackMessageUseCase = remember(aiRepository) {
-                    RollbackMessageUseCase(aiRepository, messagePersistenceGateway)
+                val rollbackMessageUseCase = remember(aiRepository, messageRepository) {
+                    RollbackMessageUseCase(aiRepository, messageRepository)
                 }
                 val imageGenerationUseCase = remember(aiRepository) {
                     ImageGenerationUseCase(aiRepository)
@@ -171,6 +168,26 @@ class ConversationFragment : Fragment() {
                     FilterMemoryMessagesUseCase(aiRepository)
                 }
 
+                // Create ObserveMessagesUseCase
+                val observeMessagesUseCase = remember(messageRepository) {
+                    com.example.star.aiwork.domain.usecase.message.ObserveMessagesUseCase(messageRepository)
+                }
+
+                // 从 UseCase 订阅当前会话的消息
+                val messagesFlow = remember(currentSession?.id, observeMessagesUseCase) {
+                    currentSession?.id?.let { sessionId ->
+                        observeMessagesUseCase(sessionId)
+                    } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+                }
+                val messagesFromUseCase by messagesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+
+                // 转换消息实体为 UI 模型
+                val convertedMessages = remember(messagesFromUseCase) {
+                    messagesFromUseCase.map { entity ->
+                        convertMessageEntityToMessage(entity)
+                    }
+                }
+
                 val conversationLogic = remember(
                     currentSession?.id,
                     uiState,
@@ -181,7 +198,9 @@ class ConversationFragment : Fragment() {
                     saveEmbeddingUseCase,
                     filterMemoryMessagesUseCase,
                     activeProviderId,
-                    activeModelId
+                    activeModelId,
+                    messageRepository,
+                    sessionRepository
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -195,7 +214,8 @@ class ConversationFragment : Fragment() {
                         generateChatNameUseCase = generateChatNameUseCase,
                         sessionId = currentSession?.id ?: UUID.randomUUID().toString(),
                         getProviderSettings = { providerSettings },
-                        persistenceGateway = messagePersistenceGateway,
+                        messageRepository = messageRepository,
+                        sessionRepository = sessionRepository,
                         onRenameSession = { sessionId, newName ->
                             chatViewModel.renameSession(sessionId, newName)
                         },
@@ -232,86 +252,19 @@ class ConversationFragment : Fragment() {
                     )
                 }
 
-                val convertedMessages = remember(messagesFromDb) {
-                    messagesFromDb.map { entity ->
-                        convertMessageEntityToMessage(entity)
-                    }
-                }
-
-                // 只在会话切换时，从数据库同步消息到 UI 状态（仅在 uiState 中没有消息时）
-                // uiState 是从缓存中获取的，如果它已经包含消息（之前加载过），则直接使用
-                // 只有当 uiState.messages 为空时（新会话或首次加载），才从数据库加载
-                // 这样可以保留正在流式生成的消息（临时状态），避免不必要的清空和重新加载
-                LaunchedEffect(currentSession?.id) {
-                    currentSession?.let { session ->
-                        // 使用同一个 uiState 实例，确保一致性
-                        // uiState 是从缓存中获取的，所以 isGenerating、isRecording、textFieldValue 等
-                        // 会话级别的状态字段会自动从缓存中恢复，不需要重置
-                        
-                        // 只有当 uiState 中没有消息时，才从数据库加载
-                        // 如果 uiState 中已有消息，说明这个会话之前已经被加载过，直接使用即可
-                        val isTemporarySession = chatViewModel.isNewChat(session.id)
-                        val needsLoad = if (uiState.messages.isEmpty()) {
-                            !isTemporarySession
-                        } else {
-                            // 如果 uiState 不为空，检查消息数量是否与数据库一致
-                            // 对于临时会话，不需要检查数据库（因为临时会话的消息不在数据库中）
-                            if (isTemporarySession) {
-                                false // 临时会话的消息只在内存中，不需要从数据库加载
-                            } else {
-                                // 检查数据库中的消息数量是否与 uiState 中的消息数量一致
-                                // 如果不一致，说明需要重新加载（可能是从临时会话切换过来的）
-                                val messagesFromDb = chatViewModel.messages.value
-                                val currentSessionMessages = messagesFromDb.filter { it.sessionId == session.id }
-                                uiState.messages.size != currentSessionMessages.size
-                            }
-                        }
-                        if (needsLoad) {
-                            // 如果 uiState 中有消息但不属于当前会话，先清空
-                            if (uiState.messages.isNotEmpty()) {
-                                uiState.clearMessages()
-                            }
-                            // 等待 messagesFromDb 异步更新到当前会话
-                            // 通过 Flow 等待消息更新，确保获取的是当前会话的消息，而不是旧会话的消息
-                            if (!isTemporarySession) {
-                                // 修复 Bug：直接从数据库获取当前会话的消息，而不是依赖 ViewModel 共享的 messages 流
-                                // ViewModel 的 messages 流可能存在延迟或初始空值，导致 LaunchedEffect 提前结束
-                                val latestMessages = withContext(Dispatchers.IO) {
-                                    messageRepository.observeMessages(session.id).first()
-                                }
-
-                                // 转换消息并添加到 UI 状态
-                                latestMessages
-                                    .map { entity ->
-                                        convertMessageEntityToMessage(entity)
-                                    }
-                                    .forEach { msg ->
-                                        uiState.addMessage(msg)
-                                    }
-                            }
-                        }
-                        // 如果 uiState.messages 不为空，说明消息已经在 uiState 中（从缓存恢复），
-                        // processMessage 和 Regenerate 也会更新 uiState 中的消息，所以不需要重新加载
-                        
-                        // 更新 channelName
-                        uiState.channelName = session.name.ifBlank { "新对话" }
-                        // 注意：isGenerating、isRecording、isTranscribing、pendingTranscription、
-                        // textFieldValue、selectedImageUri 等字段会从缓存的 ConversationUiState 中
-                        // 自动恢复，保持每个会话的独立状态
-                    }
-                }
-
-                // 当会话名称变化时，更新 UI 状态的 channelName
-                LaunchedEffect(currentSession?.name, currentSession?.id) {
+                // 当会话切换时，更新 UI 状态的 channelName
+                LaunchedEffect(currentSession?.id, currentSession?.name) {
                     currentSession?.let { session ->
                         uiState.channelName = session.name.ifBlank { "新对话" }
                     }
                 }
+
 
                 JetchatTheme {
                     ConversationContent(
                         uiState = uiState,
                         logic = conversationLogic,
+                        messages = convertedMessages,  // 从 UseCase 订阅的消息
                         navigateToProfile = { user ->
                             val bundle = bundleOf("userId" to user)
                             findNavController().navigate(
@@ -348,7 +301,7 @@ class ConversationFragment : Fragment() {
                         onSearchQueryChanged = { query -> chatViewModel.searchSessions(query) },
                         searchResults = searchResults,
                         onSessionSelected = { session -> chatViewModel.selectSession(session) },
-                        generateChatNameUseCase = generateChatNameUseCase,  // ← 新增这一行
+                        generateChatNameUseCase = generateChatNameUseCase,
                         onLoadMoreMessages = { chatViewModel.loadMoreMessages() }
                     )
                 }
@@ -371,11 +324,16 @@ class ConversationFragment : Fragment() {
             "Now"
         }
 
+        // 将 MessageStatus 转换为 isLoading 字段
+        // STREAMING 状态表示正在流式生成，应该显示加载状态
+        val isLoading = entity.status == com.example.star.aiwork.domain.model.MessageStatus.STREAMING
+
         return Message(
             author = author,
             content = entity.content,
             timestamp = timestamp,
-            imageUrl = entity.metadata.localFilePath
+            imageUrl = entity.metadata.localFilePath,
+            isLoading = isLoading
         )
     }
 }

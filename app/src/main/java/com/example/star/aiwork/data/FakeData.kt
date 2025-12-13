@@ -43,7 +43,6 @@ val unreadMessages = initialMessages.filter { it.author != "me" }
  * 示例 UI 状态。
  */
 val exampleUiState = ConversationUiState(
-    initialMessages = initialMessages,
     channelName = "#composers",
     channelMembers = 42,
 )

@@ -13,12 +13,16 @@ import coil.size.Size
 import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
+import com.example.star.aiwork.domain.repository.MessageRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.infra.util.toBase64
 import com.example.star.aiwork.ui.ai.UIMessage
 import com.example.star.aiwork.ui.ai.UIMessagePart
 import com.example.star.aiwork.ui.conversation.ConversationUiState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 /**
@@ -39,6 +43,8 @@ object MessageConstructionHelper {
         activeAgent: Agent?,
         retrieveKnowledge: suspend (String) -> String,
         context: Context,
+        messageRepository: MessageRepository?,
+        sessionId: String,
         computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
         searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
         topK: Int = 3
@@ -52,6 +58,8 @@ object MessageConstructionHelper {
             null,
             retrieveKnowledge,
             context,
+            messageRepository,
+            sessionId,
             computeEmbeddingUseCase,
             searchEmbeddingUseCase,
             topK
@@ -67,6 +75,8 @@ object MessageConstructionHelper {
         knowledgeContext: String? = null,
         retrieveKnowledge: (suspend (String) -> String)? = null,
         context: Context,
+        messageRepository: MessageRepository?,
+        sessionId: String,
         computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
         searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
         topK: Int = 3
@@ -98,16 +108,20 @@ object MessageConstructionHelper {
 
         // 获取历史消息（当前对话的历史聊天记录）
         // 注意：USER 和 ASSISTANT 角色的消息本身就是历史聊天记录，模型可以通过角色区分
-        val contextMessages = uiState.messages.asReversed()
-            .filter { it.author != "System" }
-            .map { msg ->
-                val role = if (msg.author == authorMe) MessageRole.USER else MessageRole.ASSISTANT
-                val parts = mutableListOf<UIMessagePart>()
-                if (msg.content.isNotEmpty()) {
-                    parts.add(UIMessagePart.Text(msg.content))
-                }
-                UIMessage(role = role, parts = parts)
-            }.takeLast(10).toMutableList()
+        // 从 Repository 获取消息，而不是从 uiState.messages
+        val contextMessages = withContext(Dispatchers.IO) {
+            messageRepository?.observeMessages(sessionId)?.first()
+                ?.filter { it.role != MessageRole.SYSTEM }
+                ?.reversed()
+                ?.takeLast(10)
+                ?.map { entity ->
+                    val parts = mutableListOf<UIMessagePart>()
+                    if (entity.content.isNotEmpty()) {
+                        parts.add(UIMessagePart.Text(entity.content))
+                    }
+                    UIMessage(role = entity.role, parts = parts)
+                }?.toMutableList() ?: mutableListOf()
+        }
 
         // 在向模型发送信息之前，计算用户输入的 embedding 并搜索相关句子
         val relatedSentences = mutableListOf<String>()
@@ -201,10 +215,15 @@ object MessageConstructionHelper {
         currentMessageParts.add(UIMessagePart.Text(finalUserContent))
 
         if (!isAutoTriggered) {
-            val lastUserMsg = uiState.messages.firstOrNull { it.author == authorMe && it.author != "System" }
-            if (lastUserMsg?.imageUrl != null) {
+            // 从 Repository 获取最后一条用户消息
+            val lastUserMsg = withContext(Dispatchers.IO) {
+                messageRepository?.observeMessages(sessionId)?.first()
+                    ?.findLast { it.role == MessageRole.USER }
+            }
+            val imageUrl = lastUserMsg?.metadata?.remoteUrl ?: lastUserMsg?.metadata?.localFilePath
+            if (imageUrl != null) {
                 try {
-                    val imageUri = Uri.parse(lastUserMsg.imageUrl)
+                    val imageUri = Uri.parse(imageUrl)
 
                     // --- FIX: Take persistable URI permission to access the image after app restart ---
                     try {
@@ -228,7 +247,7 @@ object MessageConstructionHelper {
                         ))
                     }
                 } catch (t: Throwable) {
-                    Log.e("MessageConstruction", "Failed to process and scale image URI: ${lastUserMsg.imageUrl}", t)
+                    //Log.e("MessageConstruction", "Failed to process and scale image URI: ${lastUserMsg.imageUrl}", t)
                 }
             }
         }

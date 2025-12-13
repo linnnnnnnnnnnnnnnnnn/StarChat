@@ -1,8 +1,8 @@
 package com.example.star.aiwork.ui.conversation.logic
 
-import com.example.star.aiwork.domain.model.ChatDataItem
-import com.example.star.aiwork.domain.model.MessageRole
-import com.example.star.aiwork.domain.usecase.MessagePersistenceGateway
+import com.example.star.aiwork.domain.model.MessageStatus
+import com.example.star.aiwork.domain.repository.MessageRepository
+import com.example.star.aiwork.domain.repository.SessionRepository
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logThrowableChain
@@ -19,10 +19,13 @@ import kotlinx.coroutines.withContext
 
 class StreamingResponseHandler(
     private val uiState: ConversationUiState,
-    private val persistenceGateway: MessagePersistenceGateway?,
+    private val messageRepository: MessageRepository?,
+    private val sessionRepository: SessionRepository?,
     private val sessionId: String,
     private val timeNow: String,
-    private val onSessionUpdated: suspend (sessionId: String) -> Unit
+    private val onSessionUpdated: suspend (sessionId: String) -> Unit,
+    private val onMessageIdCreated: ((String) -> Unit)? = null,
+    private val getCurrentMessageId: (() -> String?)? = null
 ) {
 
     /**
@@ -48,51 +51,42 @@ class StreamingResponseHandler(
 
         // Variable to capture exception to throw later
         var capturedException: Throwable? = null
+        
+        // 获取当前流式消息的 ID
+        val messageId = getCurrentMessageId?.invoke()
 
         val streamingJob = scope.launch {
             try {
                 stream.asCharTypingStream(charDelayMs = 30L).collect { delta ->
                     fullResponse += delta
+                    
+                    // 更新 Repository 中的消息（流式输出时更新缓存）
+                    if (messageId != null && messageRepository != null) {
+                        withContext(Dispatchers.IO) {
+                            val existingMessage = messageRepository.getMessage(messageId)
+                            if (existingMessage != null) {
+                                val updatedEntity = existingMessage.copy(
+                                    content = fullResponse,
+                                    status = MessageStatus.STREAMING
+                                )
+                                messageRepository.upsertMessage(updatedEntity)
+                            }
+                        }
+                    }
+                    
                     withContext(Dispatchers.Main) {
                         if (uiState.streamResponse && delta.isNotEmpty()) {
-                            uiState.updateLastMessageLoadingState(false)
+                            // UI 会通过 observe 自动更新，这里不需要操作 uiState
                         }
 
                         if (!uiState.streamResponse && delta.isNotEmpty() && !hasShownSlowLoadingHint) {
                             hasShownSlowLoadingHint = true
-                            val hintText = "加载较慢？试试流式输出~"
-                            hintTypingJob = scope.launch {
-                                try {
-                                    for (char in hintText) {
-                                        if (isCancelledCheck()) break
-                                        withContext(Dispatchers.Main) {
-                                            uiState.appendToLastMessage(char.toString())
-                                            uiState.updateLastMessageLoadingState(true)
-                                        }
-                                        delay(30L)
-                                    }
-                                } catch (e: CancellationException) {
-                                    throw e
-                                }
-                            }
-                        }
-
-                        if (uiState.streamResponse) {
-                            uiState.appendToLastMessage(delta)
-                        }
-
-                        val currentTime = System.currentTimeMillis()
-                        if (currentTime - lastUpdateTime >= UPDATE_INTERVAL_MS) {
-                            persistenceGateway?.replaceLastAssistantMessage(
-                                sessionId,
-                                ChatDataItem(
-                                    role = MessageRole.ASSISTANT.name.lowercase(),
-                                    content = fullResponse
-                                )
-                            )
-                            lastUpdateTime = currentTime
+                            // 注意：非流式模式下的提示消息不再通过 uiState 显示
+                            // 因为消息现在通过 Repository 管理
                         }
                     }
+
+                    // 注意：消息已经通过 messageRepository.upsertMessage() 实时更新到数据库
                 }
             } catch (streamError: CancellationException) {
                 // 任何 CancellationException 都应该被正常处理，不应该被视为错误
@@ -127,22 +121,28 @@ class StreamingResponseHandler(
             throw capturedException!!
         }
 
-        withContext(Dispatchers.Main) {
-            if (!uiState.streamResponse && fullResponse.isNotBlank() && !isCancelledCheck()) {
-                uiState.updateLastMessageLoadingState(false)
-                uiState.replaceLastMessageContent(fullResponse)
+        // 更新 Repository 中的消息状态为完成
+        if (messageId != null && messageRepository != null && fullResponse.isNotBlank() && !isCancelledCheck()) {
+            withContext(Dispatchers.IO) {
+                val existingMessage = messageRepository.getMessage(messageId)
+                if (existingMessage != null) {
+                    val updatedEntity = existingMessage.copy(
+                        content = fullResponse,
+                        status = MessageStatus.DONE
+                    )
+                    messageRepository.upsertMessage(updatedEntity)
+                }
             }
+        }
+
+        withContext(Dispatchers.Main) {
             uiState.isGenerating = false
         }
 
         if (fullResponse.isNotBlank() && !isCancelledCheck()) {
-            persistenceGateway?.replaceLastAssistantMessage(
-                sessionId,
-                ChatDataItem(
-                    role = MessageRole.ASSISTANT.name.lowercase(),
-                    content = fullResponse
-                )
-            )
+            // 消息内容已经通过 messageRepository.upsertMessage() 保存并更新了数据库
+            // 更新会话的 updatedAt 时间戳
+            sessionRepository?.updateSessionTimestamp(sessionId)
             onSessionUpdated(sessionId)
         }
 
