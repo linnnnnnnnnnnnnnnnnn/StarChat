@@ -477,13 +477,11 @@ class ConversationLogic(
 
         // 2. Save User Message to Repository
         // 注意：用户消息的保存现在由 SendMessageUseCase 负责，这里不再重复保存
-        // 但需要处理图片URI和Auto-Loop的情况
         val userMessageTimestamp = System.currentTimeMillis()
         if (!isRetry && !isAutoTriggered) {
-            // 清空选中的图片URI（图片会在 SendMessageUseCase 中通过 ChatDataItem 保存）
+            // 清空选中的图片URI（保留UI状态，但不处理图片功能）
             uiState.selectedImageUri = null
         }
-        // Auto-Loop 的消息会在 SendMessageUseCase 中保存，这里不需要单独处理
 
         // 3. Call LLM or Image Generation
         if (providerSetting != null && model != null) {
