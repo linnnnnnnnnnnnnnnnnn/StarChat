@@ -13,6 +13,7 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.domain.repository.SessionRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
@@ -64,6 +65,7 @@ class ConversationLogic(
     private val rollbackMessageUseCase: RollbackMessageUseCase,
     private val imageGenerationUseCase: ImageGenerationUseCase,
     private val generateChatNameUseCase: GenerateChatNameUseCase? = null,
+    private val updateMessageUseCase: UpdateMessageUseCase? = null,
     private val sessionId: String,
     private val getProviderSettings: () -> List<ProviderSetting>,
     private val messageRepository: MessageRepository? = null,
@@ -94,60 +96,6 @@ class ConversationLogic(
     // 当前正在流式生成的消息 ID（用于更新消息内容）
     private var currentStreamingMessageId: String? = null
 
-    /**
-     * 将 UI 层的 Message 转换为 MessageEntity 并保存到 Repository
-     * @param message 要保存的消息
-     * @param createdAt 可选的时间戳，如果不提供则使用当前时间
-     */
-    private suspend fun saveMessageToRepository(message: Message, createdAt: Long? = null): String {
-        val messageId = UUID.randomUUID().toString()
-        val role = when (message.author) {
-            authorMe -> MessageRole.USER
-            "AI", "assistant", "model" -> MessageRole.ASSISTANT
-            "System", "system" -> MessageRole.SYSTEM
-            else -> MessageRole.USER
-        }
-        val type = when {
-            message.imageUrl != null -> MessageType.IMAGE
-            role == MessageRole.SYSTEM -> MessageType.SYSTEM
-            else -> MessageType.TEXT
-        }
-        val status = when {
-            message.isLoading -> MessageStatus.STREAMING
-            else -> MessageStatus.DONE
-        }
-        
-        val entity = MessageEntity(
-            id = messageId,
-            sessionId = sessionId,
-            role = role,
-            type = type,
-            content = message.content,
-            metadata = MessageMetadata(
-                remoteUrl = message.imageUrl,
-                localFilePath = message.imageUrl
-            ),
-            createdAt = createdAt ?: System.currentTimeMillis(),
-            status = status
-        )
-        
-        messageRepository?.upsertMessage(entity)
-        return messageId
-    }
-
-    /**
-     * 更新 Repository 中的消息内容（用于流式输出）
-     */
-    private suspend fun updateMessageInRepository(messageId: String, content: String, isLoading: Boolean = false) {
-        val existingMessage = messageRepository?.getMessage(messageId)
-        if (existingMessage != null) {
-            val updatedEntity = existingMessage.copy(
-                content = content,
-                status = if (isLoading) MessageStatus.STREAMING else MessageStatus.DONE
-            )
-            messageRepository.upsertMessage(updatedEntity)
-        }
-    }
 
     // Handlers
     private val imageGenerationHandler = ImageGenerationHandler(
@@ -327,10 +275,12 @@ class ConversationLogic(
             
             // 更新 Repository 中的消息（包含取消提示）
             if (currentContent.isNotEmpty()) {
-                updateMessageInRepository(messageId, currentContent, isLoading = false)
-                // 消息已经通过 updateMessageInRepository() 保存到数据库
-                // 更新会话的 updatedAt 时间戳
-                sessionRepository?.updateSessionTimestamp(sessionId)
+                updateMessageUseCase?.invoke(
+                    messageId = messageId,
+                    content = currentContent,
+                    status = MessageStatus.DONE,
+                    updateSessionTimestamp = true
+                )
             }
         } else {
             currentContent = ""
@@ -374,6 +324,10 @@ class ConversationLogic(
         retrieveKnowledge: suspend (String) -> String = { "" },
         isRetry: Boolean = false
     ) {
+        // 清除临时错误消息（用户发送新消息时，错误消息应该消失）
+        withContext(Dispatchers.Main) {
+            uiState.temporaryErrorMessages = emptyList()
+        }
         
         // Session management (New Chat / Rename)
         if (isNewChat(sessionId)) {
@@ -619,8 +573,11 @@ class ConversationLogic(
                 handleError(e, inputContent, providerSetting, model, isAutoTriggered, loopCount, retrieveKnowledge, isRetry)
             }
         } else {
-            withContext(Dispatchers.IO) {
-                saveMessageToRepository(Message("System", "No AI Provider configured.", timeNow))
+            // 错误消息不保存到数据库，只添加到临时错误消息列表
+            withContext(Dispatchers.Main) {
+                uiState.temporaryErrorMessages = listOf(
+                    Message("System", "No AI Provider configured.", timeNow)
+                )
             }
             uiState.isGenerating = false
         }
@@ -643,8 +600,16 @@ class ConversationLogic(
             // 更新消息状态为完成（如果存在流式消息）
             val messageId = currentStreamingMessageId
             if (messageId != null) {
-                withContext(Dispatchers.IO) {
-                    updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
+                val existingContent = withContext(Dispatchers.IO) {
+                    messageRepository?.getMessage(messageId)?.content ?: ""
+                }
+                if (existingContent.isNotEmpty()) {
+                    updateMessageUseCase?.invoke(
+                        messageId = messageId,
+                        content = existingContent,
+                        status = MessageStatus.DONE,
+                        updateSessionTimestamp = false
+                    )
                 }
             }
             withContext(Dispatchers.Main) {
@@ -680,12 +645,23 @@ class ConversationLogic(
 
             if (fallbackProvider != null && fallbackModel != null && !isSameAsCurrent) {
                 Log.i("ConversationLogic", "✅ Triggering configured fallback to ${fallbackProvider.name}...")
-                withContext(Dispatchers.IO) {
-                    val messageId = currentStreamingMessageId
-                    if (messageId != null) {
-                        updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
+                val messageId = currentStreamingMessageId
+                if (messageId != null) {
+                    val existingContent = withContext(Dispatchers.IO) {
+                        messageRepository?.getMessage(messageId)?.content ?: ""
                     }
-                    saveMessageToRepository(
+                    if (existingContent.isNotEmpty()) {
+                        updateMessageUseCase?.invoke(
+                            messageId = messageId,
+                            content = existingContent,
+                            status = MessageStatus.DONE,
+                            updateSessionTimestamp = false
+                        )
+                    }
+                }
+                // 错误消息不保存到数据库，只添加到临时错误消息列表
+                withContext(Dispatchers.Main) {
+                    uiState.temporaryErrorMessages = listOf(
                         Message("System", "Request failed (${e.message}). Fallback to ${fallbackProvider.name} (${fallbackModel.displayName})...", timeNow)
                     )
                 }
@@ -707,21 +683,34 @@ class ConversationLogic(
         }
 
         Log.e("ConversationLogic", "❌ No fallback triggered. Displaying error message.")
-        withContext(Dispatchers.IO) {
-            // 如果是重试产生的空消息，删除它
-            val messageId = currentStreamingMessageId
-            if (messageId != null) {
-                val existingMessage = messageRepository?.getMessage(messageId)
-                if (existingMessage != null && existingMessage.content.isBlank()) {
-                    messageRepository?.deleteMessage(messageId)
+        val messageId = currentStreamingMessageId
+        if (messageId != null) {
+            val existingMessage = withContext(Dispatchers.IO) {
+                messageRepository?.getMessage(messageId)
+            }
+            if (existingMessage != null) {
+                if (existingMessage.content.isBlank()) {
+                    // 如果是重试产生的空消息，删除它
+                    withContext(Dispatchers.IO) {
+                        messageRepository?.deleteMessage(messageId)
+                    }
                 } else {
                     // 更新消息状态为完成
-                    updateMessageInRepository(messageId, existingMessage?.content ?: "", isLoading = false)
+                    updateMessageUseCase?.invoke(
+                        messageId = messageId,
+                        content = existingMessage.content,
+                        status = MessageStatus.DONE,
+                        updateSessionTimestamp = false
+                    )
                 }
             }
-            
-            val errorMessage = getErrorMessage(e)
-            saveMessageToRepository(Message("System", errorMessage, timeNow))
+        }
+        // 错误消息不保存到数据库，只添加到临时错误消息列表
+        val errorMessage = getErrorMessage(e)
+        withContext(Dispatchers.Main) {
+            uiState.temporaryErrorMessages = listOf(
+                Message("System", errorMessage, timeNow)
+            )
         }
         withContext(Dispatchers.Main) {
             uiState.activeTaskId = null

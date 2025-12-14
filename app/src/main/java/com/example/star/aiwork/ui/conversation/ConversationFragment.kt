@@ -55,6 +55,7 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
@@ -145,6 +146,13 @@ class ConversationFragment : Fragment() {
                 val generateChatNameUseCase = remember(aiRepository) {
                     GenerateChatNameUseCase(aiRepository)
                 }
+                val updateMessageUseCase = remember(messageRepository, sessionRepository) {
+                    if (messageRepository != null && sessionRepository != null) {
+                        UpdateMessageUseCase(messageRepository, sessionRepository)
+                    } else {
+                        null
+                    }
+                }
 
                 // 创建 Embedding 相关的 UseCase
                 val embeddingService = remember(context) { EmbeddingService(context) }
@@ -182,10 +190,12 @@ class ConversationFragment : Fragment() {
                 val messagesFromUseCase by messagesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
                 // 转换消息实体为 UI 模型
-                val convertedMessages = remember(messagesFromUseCase) {
-                    messagesFromUseCase.map { entity ->
+                val convertedMessages = remember(messagesFromUseCase, uiState.temporaryErrorMessages) {
+                    val dbMessages = messagesFromUseCase.map { entity ->
                         convertMessageEntityToMessage(entity)
                     }
+                    // 合并数据库消息和临时错误消息（临时错误消息显示在最后）
+                    dbMessages + uiState.temporaryErrorMessages
                 }
 
                 val conversationLogic = remember(
@@ -200,7 +210,8 @@ class ConversationFragment : Fragment() {
                     activeProviderId,
                     activeModelId,
                     messageRepository,
-                    sessionRepository
+                    sessionRepository,
+                    updateMessageUseCase
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -212,6 +223,7 @@ class ConversationFragment : Fragment() {
                         rollbackMessageUseCase = rollbackMessageUseCase,
                         imageGenerationUseCase = imageGenerationUseCase,
                         generateChatNameUseCase = generateChatNameUseCase,
+                        updateMessageUseCase = updateMessageUseCase,
                         sessionId = currentSession?.id ?: UUID.randomUUID().toString(),
                         getProviderSettings = { providerSettings },
                         messageRepository = messageRepository,

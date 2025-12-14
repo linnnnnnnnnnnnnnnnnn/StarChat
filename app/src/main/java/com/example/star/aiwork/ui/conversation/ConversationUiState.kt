@@ -95,6 +95,9 @@ class ConversationUiState(
     // 暂存选中的图片 URI
     var selectedImageUri: Uri? by mutableStateOf(null)
 
+    // 临时错误消息列表（不保存到数据库，只在UI中显示）
+    var temporaryErrorMessages: List<Message> by mutableStateOf(emptyList())
+
     /**
      * 用于生成预览卡片标题的UseCase
      */

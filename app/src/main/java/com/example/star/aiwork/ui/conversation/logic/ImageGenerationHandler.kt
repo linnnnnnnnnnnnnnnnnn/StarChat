@@ -114,10 +114,13 @@ class ImageGenerationHandler(
                 withContext(Dispatchers.IO) {
                     // 删除空消息
                     messageRepository?.deleteMessage(messageId)
-                    val errorMessage = getErrorMessage(error)
-                    saveMessageToRepository(Message("System", errorMessage, timeNow))
                 }
+                // 错误消息不保存到数据库，只添加到临时错误消息列表
+                val errorMessage = getErrorMessage(error)
                 withContext(Dispatchers.Main) {
+                    uiState.temporaryErrorMessages = listOf(
+                        Message("System", errorMessage, timeNow)
+                    )
                     uiState.isGenerating = false
                 }
                 error.printStackTrace()

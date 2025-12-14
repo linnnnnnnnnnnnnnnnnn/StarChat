@@ -54,6 +54,7 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import com.example.star.aiwork.ui.theme.JetchatTheme
@@ -453,6 +454,7 @@ fun ConversationPreview() {
         val pauseStreamingUseCase = PauseStreamingUseCase(aiRepository)
         val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, messageRepository)
         val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
+        val updateMessageUseCase = UpdateMessageUseCase(messageRepository, sessionRepository)
 
         val previewLogic = ConversationLogic(
             uiState = exampleUiState,
@@ -463,6 +465,7 @@ fun ConversationPreview() {
             pauseStreamingUseCase = pauseStreamingUseCase,
             rollbackMessageUseCase = rollbackMessageUseCase,
             imageGenerationUseCase = imageGenerationUseCase,
+            updateMessageUseCase = updateMessageUseCase,
             sessionId = "123",
             getProviderSettings = { emptyList() },
             messageRepository = messageRepository,

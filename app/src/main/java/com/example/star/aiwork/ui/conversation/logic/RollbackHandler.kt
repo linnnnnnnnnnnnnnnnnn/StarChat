@@ -64,8 +64,11 @@ class RollbackHandler(
         onTaskIdUpdated: suspend (String?) -> Unit
     ) {
         if (providerSetting == null || model == null) {
-            withContext(Dispatchers.IO) {
-                saveMessageToRepository(Message("System", "No AI Provider configured.", timeNow))
+            // 错误消息不保存到数据库，只添加到临时错误消息列表
+            withContext(Dispatchers.Main) {
+                uiState.temporaryErrorMessages = listOf(
+                    Message("System", "No AI Provider configured.", timeNow)
+                )
             }
             return
         }
@@ -147,11 +150,12 @@ class RollbackHandler(
                     )
                 },
                 onFailure = { error ->
-                    withContext(Dispatchers.IO) {
-                        val errorMessage = getErrorMessage(error)
-                        saveMessageToRepository(Message("System", errorMessage, timeNow))
-                    }
+                    // 错误消息不保存到数据库，只添加到临时错误消息列表
+                    val errorMessage = getErrorMessage(error)
                     withContext(Dispatchers.Main) {
+                        uiState.temporaryErrorMessages = listOf(
+                            Message("System", errorMessage, timeNow)
+                        )
                         uiState.isGenerating = false
                     }
                     error.printStackTrace()
@@ -165,11 +169,12 @@ class RollbackHandler(
                 return
             }
             
-            withContext(Dispatchers.IO) {
-                val errorMessage = getErrorMessage(e)
-                saveMessageToRepository(Message("System", errorMessage, timeNow))
-            }
+            // 错误消息不保存到数据库，只添加到临时错误消息列表
+            val errorMessage = getErrorMessage(e)
             withContext(Dispatchers.Main) {
+                uiState.temporaryErrorMessages = listOf(
+                    Message("System", errorMessage, timeNow)
+                )
                 uiState.isGenerating = false
             }
             e.printStackTrace()
