@@ -385,64 +385,6 @@ class ConversationLogic(
         retrieveKnowledge: suspend (String) -> String = { "" },
         isRetry: Boolean = false
     ) {
-        // ========== 打印当前会话的数据库和缓存信息 ==========
-        withContext(Dispatchers.IO) {
-            try {
-                // 从数据库获取消息
-                val dbMessages = messageRepository?.observeMessages(sessionId)?.first() ?: emptyList()
-                // 从缓存获取消息（非 suspend 操作，可以直接调用）
-                val cachedMessages = messageRepository?.getCachedMessages(sessionId)
-                
-                Log.d("ConversationLogic", "=".repeat(100))
-                Log.d("ConversationLogic", "📤 [用户点击发送] 会话ID: $sessionId")
-                Log.d("ConversationLogic", "📝 输入内容: ${inputContent.take(100)}${if (inputContent.length > 100) "..." else ""}")
-                Log.d("ConversationLogic", "")
-                Log.d("ConversationLogic", "💾 [数据库] 消息总数: ${dbMessages.size}")
-                if (dbMessages.isNotEmpty()) {
-                    dbMessages.forEachIndexed { index, msg ->
-                        val contentPreview = msg.content.take(50).let { 
-                            if (msg.content.length > 50) "$it..." else it 
-                        }
-                        Log.d("ConversationLogic", "  [$index] ID=${msg.id.take(8)}... | Role=${msg.role.name} | Status=${msg.status.name} | Content=\"$contentPreview\" | CreatedAt=${msg.createdAt}")
-                    }
-                } else {
-                    Log.d("ConversationLogic", "  (数据库中没有消息)")
-                }
-                Log.d("ConversationLogic", "")
-                Log.d("ConversationLogic", "🗂️  [缓存] 消息总数: ${cachedMessages?.size ?: 0}")
-                if (cachedMessages != null && cachedMessages.isNotEmpty()) {
-                    cachedMessages.forEachIndexed { index, msg ->
-                        val contentPreview = msg.content.take(50).let { 
-                            if (msg.content.length > 50) "$it..." else it 
-                        }
-                        Log.d("ConversationLogic", "  [$index] ID=${msg.id.take(8)}... | Role=${msg.role.name} | Status=${msg.status.name} | Content=\"$contentPreview\" | CreatedAt=${msg.createdAt}")
-                    }
-                } else {
-                    Log.d("ConversationLogic", "  (缓存中没有消息)")
-                }
-                Log.d("ConversationLogic", "")
-                // 检查数据库和缓存是否一致
-                val dbIds = dbMessages.map { it.id }.toSet()
-                val cachedIds = cachedMessages?.map { it.id }?.toSet() ?: emptySet()
-                val onlyInDb = dbIds - cachedIds
-                val onlyInCache = cachedIds - dbIds
-                if (onlyInDb.isNotEmpty() || onlyInCache.isNotEmpty()) {
-                    Log.d("ConversationLogic", "⚠️  [数据不一致检测]")
-                    if (onlyInDb.isNotEmpty()) {
-                        Log.d("ConversationLogic", "  仅在数据库中: ${onlyInDb.map { it.take(8) + "..." }.joinToString(", ")}")
-                    }
-                    if (onlyInCache.isNotEmpty()) {
-                        Log.d("ConversationLogic", "  仅在缓存中: ${onlyInCache.map { it.take(8) + "..." }.joinToString(", ")}")
-                    }
-                } else {
-                    Log.d("ConversationLogic", "✅ [数据一致性] 数据库和缓存中的消息ID完全一致")
-                }
-                Log.d("ConversationLogic", "=".repeat(100))
-            } catch (e: Exception) {
-                Log.e("ConversationLogic", "❌ [打印消息信息失败] ${e.message}", e)
-            }
-        }
-        // ========== 打印信息结束 ==========
         
         // Session management (New Chat / Rename)
         if (isNewChat(sessionId)) {

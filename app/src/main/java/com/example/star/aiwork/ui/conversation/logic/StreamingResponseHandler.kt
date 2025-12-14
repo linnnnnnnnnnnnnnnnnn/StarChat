@@ -60,23 +60,8 @@ class StreamingResponseHandler(
                 stream.asCharTypingStream(charDelayMs = 30L).collect { delta ->
                     fullResponse += delta
                     
-                    // 更新 Repository 中的消息（流式输出时更新缓存）
-                    if (messageId != null && messageRepository != null) {
-                        withContext(Dispatchers.IO) {
-                            val existingMessage = messageRepository.getMessage(messageId)
-                            if (existingMessage != null) {
-                                // 收到第一个chunk时，将状态从 SENDING 更新为 STREAMING
-                                // 后续chunk保持 STREAMING 状态
-                                val newStatus = MessageStatus.STREAMING
-                                
-                                val updatedEntity = existingMessage.copy(
-                                    content = fullResponse,
-                                    status = newStatus
-                                )
-                                messageRepository.upsertMessage(updatedEntity)
-                            }
-                        }
-                    }
+                    // 消息状态和内容的更新现在在 domain 层的 SendMessageUseCase 中处理
+                    // 这里只处理 UI 相关的逻辑
                     
                     withContext(Dispatchers.Main) {
                         if (uiState.streamResponse && delta.isNotEmpty()) {
@@ -89,8 +74,6 @@ class StreamingResponseHandler(
                             // 因为消息现在通过 Repository 管理
                         }
                     }
-
-                    // 注意：消息已经通过 messageRepository.upsertMessage() 实时更新到数据库
                 }
             } catch (streamError: CancellationException) {
                 // 任何 CancellationException 都应该被正常处理，不应该被视为错误
@@ -125,28 +108,15 @@ class StreamingResponseHandler(
             throw capturedException!!
         }
 
-        // 更新 Repository 中的消息状态为完成
-        if (messageId != null && messageRepository != null && fullResponse.isNotBlank() && !isCancelledCheck()) {
-            withContext(Dispatchers.IO) {
-                val existingMessage = messageRepository.getMessage(messageId)
-                if (existingMessage != null) {
-                    val updatedEntity = existingMessage.copy(
-                        content = fullResponse,
-                        status = MessageStatus.DONE
-                    )
-                    messageRepository.upsertMessage(updatedEntity)
-                }
-            }
-        }
+        // 消息状态和内容的更新现在在 domain 层的 SendMessageUseCase 中处理
+        // 这里只处理 UI 相关的逻辑
 
         withContext(Dispatchers.Main) {
             uiState.isGenerating = false
         }
 
         if (fullResponse.isNotBlank() && !isCancelledCheck()) {
-            // 消息内容已经通过 messageRepository.upsertMessage() 保存并更新了数据库
-            // 更新会话的 updatedAt 时间戳
-            sessionRepository?.updateSessionTimestamp(sessionId)
+            // 通知会话已更新（消息更新已在 SendMessageUseCase 中完成）
             onSessionUpdated(sessionId)
         }
 

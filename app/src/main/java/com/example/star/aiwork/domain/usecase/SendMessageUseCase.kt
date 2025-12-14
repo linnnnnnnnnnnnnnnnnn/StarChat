@@ -15,8 +15,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 /**
@@ -63,16 +66,63 @@ class SendMessageUseCase(
             sessionRepository.updateSessionTimestamp(sessionId)
         }
 
-        // 立即返回，不等待数据库操作完成
+        // 包装 stream，在收集时自动更新消息状态和内容
+        val assistantMessageId = assistantEntity.id
+        // 使用对象来保存状态，确保在 Flow 操作符中正确共享
+        val state = object {
+            var accumulatedContent = ""
+            var isFirstChunk = true
+        }
+        
         val stream = aiRepository.streamChat(history + userMessage, providerSetting, params, taskId)
             .onStart {
                 // 可以在此通知 UI 启动中
+            }
+            .onEach { chunk ->
+                state.accumulatedContent += chunk
+                
+                // 在 domain 层更新消息状态和内容
+                withContext(Dispatchers.IO) {
+                    val existingMessage = messageRepository.getMessage(assistantMessageId)
+                    if (existingMessage != null) {
+                        // 收到第一个chunk时，将状态从 SENDING 更新为 STREAMING
+                        val newStatus = if (state.isFirstChunk && chunk.isNotEmpty()) {
+                            state.isFirstChunk = false
+                            MessageStatus.STREAMING
+                        } else {
+                            MessageStatus.STREAMING
+                        }
+                        
+                        val updatedEntity = existingMessage.copy(
+                            content = state.accumulatedContent,
+                            status = newStatus
+                        )
+                        messageRepository.upsertMessage(updatedEntity)
+                    }
+                }
+            }
+            .onCompletion { cause ->
+                // 流完成时，更新消息状态为 DONE（如果没有错误）
+                // 使用异步执行，避免阻塞流的完成
+                if (cause == null && state.accumulatedContent.isNotBlank()) {
+                    scope.launch(Dispatchers.IO) {
+                        val existingMessage = messageRepository.getMessage(assistantMessageId)
+                        if (existingMessage != null) {
+                            val updatedEntity = existingMessage.copy(
+                                content = state.accumulatedContent,
+                                status = MessageStatus.DONE
+                            )
+                            messageRepository.upsertMessage(updatedEntity)
+                            sessionRepository.updateSessionTimestamp(sessionId)
+                        }
+                    }
+                }
             }
 
         return Output(
             stream = stream,
             taskId = taskId,
-            assistantMessageId = assistantEntity.id
+            assistantMessageId = assistantMessageId
         )
     }
 
