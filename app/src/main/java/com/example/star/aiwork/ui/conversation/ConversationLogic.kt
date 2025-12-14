@@ -53,7 +53,7 @@ import java.util.UUID
 
 /**
  * Handles the business logic for processing messages in the conversation.
- * Includes sending messages to AI providers and handling fallbacks.
+ * Includes sending messages to AI providers.
  * 
  * Refactored to delegate responsibilities to smaller handlers:
  * - ImageGenerationHandler
@@ -533,13 +533,6 @@ class ConversationLogic(
         val result = if (handleErrorUseCase != null) {
             handleErrorUseCase(
                 error = e,
-                currentProviderSetting = providerSetting,
-                currentModel = model,
-                isRetry = isRetry,
-                isFallbackEnabled = uiState.isFallbackEnabled,
-                fallbackProviderId = uiState.fallbackProviderId,
-                fallbackModelId = uiState.fallbackModelId,
-                allProviderSettings = getProviderSettings(),
                 currentMessageId = currentStreamingMessageId
             )
         } else {
@@ -557,24 +550,6 @@ class ConversationLogic(
                     uiState.isGenerating = false
                 }
                 taskManager?.removeTasks(sessionId)
-            }
-
-            is ErrorHandlingResult.ShouldFallback -> {
-                // 需要 fallback，显示提示消息并重新处理
-                withContext(Dispatchers.Main) {
-                    uiState.temporaryErrorMessages = listOf(
-                        Message("System", result.fallbackMessage, timeNow)
-                    )
-                }
-                processMessage(
-                    inputContent = inputContent,
-                    providerSetting = result.fallbackProvider,
-                    model = result.fallbackModel,
-                    isAutoTriggered = isAutoTriggered,
-                    loopCount = loopCount,
-                    retrieveKnowledge = retrieveKnowledge,
-                    isRetry = true
-                )
             }
 
             is ErrorHandlingResult.ShouldDisplayError -> {
