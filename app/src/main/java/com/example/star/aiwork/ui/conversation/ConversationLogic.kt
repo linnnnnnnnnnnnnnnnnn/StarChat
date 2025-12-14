@@ -28,7 +28,6 @@ import com.example.star.aiwork.ui.conversation.logic.MemoryBuffer
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
-import com.example.star.aiwork.ui.conversation.logic.AutoLoopHandler
 import com.example.star.aiwork.ui.conversation.logic.ImageGenerationHandler
 import com.example.star.aiwork.ui.conversation.logic.MemoryTriggerFilter
 import com.example.star.aiwork.ui.conversation.logic.MessageConstructionHelper
@@ -47,13 +46,12 @@ import java.util.UUID
 
 /**
  * Handles the business logic for processing messages in the conversation.
- * Includes sending messages to AI providers, handling fallbacks, and autolooping agents.
+ * Includes sending messages to AI providers and handling fallbacks.
  * 
  * Refactored to delegate responsibilities to smaller handlers:
  * - ImageGenerationHandler
  * - StreamingResponseHandler
  * - RollbackHandler
- * - AutoLoopHandler
  * - MessageConstructionHelper
  */
 class ConversationLogic(
@@ -182,15 +180,6 @@ class ConversationLogic(
         authorMe = authorMe,
         timeNow = timeNow,
         onMessageIdCreated = { messageId -> currentStreamingMessageId = messageId }
-    )
-
-    private val autoLoopHandler = AutoLoopHandler(
-        uiState = uiState,
-        sendMessageUseCase = sendMessageUseCase,
-        messageRepository = messageRepository,
-        getProviderSettings = getProviderSettings,
-        sessionId = sessionId,
-        timeNow = timeNow
     )
 
     // 创建 MemoryBuffer，当 buffer 满了时触发批量处理
@@ -627,20 +616,6 @@ class ConversationLogic(
                 // 清除活跃任务ID
                 withContext(Dispatchers.Main) {
                     uiState.activeTaskId = null
-                }
-
-                // --- Auto-Loop Logic with Planner ---
-                if (uiState.isAutoLoopEnabled && loopCount < uiState.maxLoopCount && fullResponse.isNotBlank()) {
-                    autoLoopHandler.handleAutoLoop(
-                        fullResponse = fullResponse,
-                        loopCount = loopCount,
-                        currentProviderSetting = providerSetting,
-                        currentModel = model,
-                        retrieveKnowledge = retrieveKnowledge,
-                        onProcessMessage = { content, pSetting, mod, auto, count, knowledge ->
-                            processMessage(content, pSetting, mod, auto, count, knowledge)
-                        }
-                    )
                 }
 
             } catch (e: Exception) {
