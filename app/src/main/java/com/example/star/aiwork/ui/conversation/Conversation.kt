@@ -54,6 +54,11 @@ import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
+import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
+import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
+import com.example.star.aiwork.domain.usecase.HandleErrorUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
+import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import com.example.star.aiwork.ui.theme.JetchatTheme
@@ -156,15 +161,6 @@ fun ConversationContent(
         uiState.activeProviderSetting = provider
         uiState.activeModel = model
 
-        // ===== 调试日志 =====
-        Log.d("ConversationContent", "初始化预览卡片生成条件:")
-        Log.d("ConversationContent", "- UseCase: ${generateChatNameUseCase != null}")
-        Log.d("ConversationContent", "- Provider: ${provider?.name} (id=${provider?.id})")
-        Log.d("ConversationContent", "- Model: ${model?.modelId}")
-        Log.d("ConversationContent", "- activeProviderId: $activeProviderId")
-        Log.d("ConversationContent", "- activeModelId: $activeModelId")
-        Log.d("ConversationContent", "- providerSettings count: ${providerSettings.size}")
-// ===== 调试日志结束 =====
     }
     // ========== 新增初始化逻辑结束 ==========
 
@@ -462,7 +458,13 @@ fun ConversationPreview() {
         val pauseStreamingUseCase = PauseStreamingUseCase(aiRepository)
         val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, messageRepository)
         val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
+        val updateMessageUseCase = UpdateMessageUseCase(messageRepository, sessionRepository)
 
+        val saveMessageUseCase = SaveMessageUseCase(messageRepository, sessionRepository)
+        val getHistoryMessagesUseCase = GetHistoryMessagesUseCase(messageRepository)
+        val shouldSaveAsMemoryUseCase = ShouldSaveAsMemoryUseCase()
+        val handleErrorUseCase = HandleErrorUseCase(messageRepository, updateMessageUseCase)
+        
         val previewLogic = ConversationLogic(
             uiState = exampleUiState,
             context = context,
@@ -472,6 +474,10 @@ fun ConversationPreview() {
             pauseStreamingUseCase = pauseStreamingUseCase,
             rollbackMessageUseCase = rollbackMessageUseCase,
             imageGenerationUseCase = imageGenerationUseCase,
+            updateMessageUseCase = updateMessageUseCase,
+            saveMessageUseCase = saveMessageUseCase,
+            getHistoryMessagesUseCase = getHistoryMessagesUseCase,
+            shouldSaveAsMemoryUseCase = shouldSaveAsMemoryUseCase,
             sessionId = "123",
             getProviderSettings = { emptyList() },
             messageRepository = messageRepository,
@@ -481,7 +487,10 @@ fun ConversationPreview() {
             isNewChat = { false },
             computeEmbeddingUseCase = null,
             searchEmbeddingUseCase = null,
-            saveEmbeddingUseCase = null
+            saveEmbeddingUseCase = null,
+            filterMemoryMessagesUseCase = null,
+            processBufferFullUseCase = null,
+            handleErrorUseCase = handleErrorUseCase
         )
 
         ConversationContent(
