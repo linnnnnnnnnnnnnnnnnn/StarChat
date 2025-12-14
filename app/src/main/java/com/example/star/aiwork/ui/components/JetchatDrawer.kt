@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
@@ -91,7 +90,6 @@ fun JetchatDrawer(
     drawerState: DrawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
     onChatClicked: (String) -> Unit,
     onProfileClicked: (String) -> Unit,
-    onPromptMarketClicked: () -> Unit = { },
     onNewChatClicked: () -> Unit = { },
     onRenameSession: (String) -> Unit = { },
     onArchiveSession: (String) -> Unit = { },
@@ -111,7 +109,6 @@ fun JetchatDrawer(
                     JetchatDrawerContent(
                         onProfileClicked = onProfileClicked,
                         onChatClicked = onChatClicked,
-                        onPromptMarketClicked = onPromptMarketClicked,
                         onNewChatClicked = onNewChatClicked,
                         onRenameSession = onRenameSession,
                         onArchiveSession = onArchiveSession,
@@ -135,7 +132,6 @@ fun JetchatDrawer(
  * 包含：
  * - 头部 Logo
  * - New Chat 按钮
- * - 角色市场
  * - 设置选项
  * - 聊天列表 (Chats)
  *
@@ -148,7 +144,6 @@ fun JetchatDrawer(
 fun JetchatDrawerContent(
     onProfileClicked: (String) -> Unit,
     onChatClicked: (String) -> Unit,
-    onPromptMarketClicked: () -> Unit,
     onNewChatClicked: () -> Unit,
     onRenameSession: (String) -> Unit,
     onArchiveSession: (String) -> Unit,
@@ -175,10 +170,6 @@ fun JetchatDrawerContent(
         
         // 实时语音通话入口
         RealtimeChatItem(onRealtimeChatClicked)
-
-        DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
-        DrawerItemHeader("角色市场")
-        MarketItem(onPromptMarketClicked)
 
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("设置")
@@ -456,37 +447,6 @@ private fun RealtimeChatItem(onRealtimeChatClicked: () -> Unit) {
 
 
 /**
- * 角色广场项组件。
- *
- * @param onClick 点击回调。
- */
-@Composable
-private fun MarketItem(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .height(56.dp)
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick),
-        verticalAlignment = CenterVertically,
-    ) {
-        Icon(
-            imageVector = Icons.Default.ShoppingCart,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp),
-            contentDescription = null,
-        )
-        Text(
-            "角色广场",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 12.dp),
-        )
-    }
-}
-
-/**
  * 聊天列表项组件。
  *
  * @param text 聊天名称。
@@ -618,7 +578,6 @@ fun DrawerPreview() {
                 JetchatDrawerContent(
                     onProfileClicked = {},
                     onChatClicked = {},
-                    onPromptMarketClicked = {},
                     onNewChatClicked = {},
                     onRenameSession = {},
                     onArchiveSession = {},
@@ -646,7 +605,6 @@ fun DrawerPreviewDark() {
                 JetchatDrawerContent(
                     onProfileClicked = {},
                     onChatClicked = {},
-                    onPromptMarketClicked = {},
                     onNewChatClicked = {},
                     onRenameSession = {},
                     onArchiveSession = {},

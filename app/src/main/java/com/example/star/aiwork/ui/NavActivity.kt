@@ -142,12 +142,6 @@ class NavActivity : AppCompatActivity() {
                                 drawerState.close()
                             }
                         },
-                        onPromptMarketClicked = {
-                            findNavController().navigate(R.id.nav_market)
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
                         onNewChatClicked = {
                             scope.launch {
                                 // 创建临时会话（仅在内存中，不保存到数据库）
