@@ -65,8 +65,8 @@ class AIRequestInterceptor : Interceptor {
             // 如果模型为空 (可能是列出模型列表的请求) 或者是已知的免费模型
             // 则使用 fallbackApiKey
             if (model.isNullOrEmpty() || model in freeModels) {
-                // 之前的兜底策略失效，现在抛出异常以便上层捕获并切换到 Ollama
-                throw IOException("SiliconCloud fallback strategy invalidated. Switching to local Ollama.")
+                // 之前的兜底策略失效，现在抛出异常以便上层捕获
+                throw IOException("SiliconCloud fallback strategy invalidated.")
             }
         }
 

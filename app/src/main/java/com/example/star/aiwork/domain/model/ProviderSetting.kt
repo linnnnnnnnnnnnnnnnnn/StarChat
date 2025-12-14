@@ -127,73 +127,6 @@ sealed class ProviderSetting {
     }
 
     /**
-     * Ollama 提供商设置。
-     * 专用于接入本地 Ollama 服务。
-     */
-    @Serializable
-    @SerialName("ollama")
-    data class Ollama(
-        override var id: String = UUID.randomUUID().toString(),
-        override var enabled: Boolean = true,
-        override var name: String = "Ollama",
-        override var models: List<Model> = emptyList(),
-        override var proxy: ProviderProxy = ProviderProxy.None,
-        override val balanceOption: BalanceOption = BalanceOption(),
-        @Transient override val builtIn: Boolean = false,
-        @Transient override val description: @Composable (() -> Unit) = {},
-        @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        override var apiKey: String = "ollama",
-        override var baseUrl: String = "http://172.16.48.147:8080",
-        override var chatCompletionsPath: String = "/api/chat",
-    ) : ProviderSetting(), OpenAICompatible {
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
-
-        override fun copyProvider(
-            id: String,
-            enabled: Boolean,
-            name: String,
-            models: List<Model>,
-            proxy: ProviderProxy,
-            balanceOption: BalanceOption,
-            builtIn: Boolean,
-            description: @Composable (() -> Unit),
-            shortDescription: @Composable (() -> Unit),
-        ): ProviderSetting {
-            return this.copy(
-                id = id,
-                enabled = enabled,
-                name = name,
-                models = models,
-                builtIn = builtIn,
-                description = description,
-                shortDescription = shortDescription,
-                proxy = proxy,
-                balanceOption = balanceOption
-            )
-        }
-    }
-
-    /**
      * Google (Gemini/Vertex AI) 提供商设置。
      */
     @Serializable
@@ -328,87 +261,13 @@ sealed class ProviderSetting {
         }
     }
 
-    /**
-     * Dify 提供商设置。
-     */
-    @Serializable
-    @SerialName("dify")
-    data class Dify(
-        override var id: String = UUID.randomUUID().toString(),
-        override var enabled: Boolean = true,
-        override var name: String = "Dify",
-        override var models: List<Model> = emptyList(),
-        override var proxy: ProviderProxy = ProviderProxy.None,
-        override val balanceOption: BalanceOption = BalanceOption(),
-        @Transient override val builtIn: Boolean = false,
-        @Transient override val description: @Composable (() -> Unit) = {},
-        @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
-        var baseUrl: String = "https://api.dify.ai/v1",
-        var botType: DifyBotType = DifyBotType.Chat,
-        var inputVariable: String = "",
-        var outputVariable: String = ""
-    ) : ProviderSetting() {
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
-
-        override fun copyProvider(
-            id: String,
-            enabled: Boolean,
-            name: String,
-            models: List<Model>,
-            proxy: ProviderProxy,
-            balanceOption: BalanceOption,
-            builtIn: Boolean,
-            description: @Composable (() -> Unit),
-            shortDescription: @Composable (() -> Unit),
-        ): ProviderSetting {
-            return this.copy(
-                id = id,
-                enabled = enabled,
-                name = name,
-                models = models,
-                proxy = proxy,
-                balanceOption = balanceOption,
-                builtIn = builtIn,
-                description = description,
-                shortDescription = shortDescription,
-            )
-        }
-    }
-
-    @Serializable
-    enum class DifyBotType {
-        Chat, Completion, Workflow
-    }
 
     companion object {
         val Types by lazy {
             listOf(
                 OpenAI::class,
-                Ollama::class,
                 Google::class,
                 Claude::class,
-                Dify::class,
             )
         }
     }

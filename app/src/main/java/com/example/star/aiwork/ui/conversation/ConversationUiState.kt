@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.star.aiwork.R
-import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
@@ -66,21 +65,10 @@ class ConversationUiState(
     var maxTokens: Int by mutableIntStateOf(2000)
     var streamResponse: Boolean by mutableStateOf(true)
 
-    // Auto-Agent Loop (轻量自动化循环) 状态
-    var isAutoLoopEnabled: Boolean by mutableStateOf(false)
-    var maxLoopCount: Int by mutableIntStateOf(3)
-
-    // Auto-Loop Planner 模型选择 (如果为 null，则使用当前对话模型)
-    var autoLoopProviderId: String? by mutableStateOf(null)
-    var autoLoopModelId: String? by mutableStateOf(null)
-
     // 兜底机制配置
     var isFallbackEnabled: Boolean by mutableStateOf(true)
     var fallbackProviderId: String? by mutableStateOf(null)
     var fallbackModelId: String? by mutableStateOf(null)
-
-    // 当前激活的 Agent
-    var activeAgent: Agent? by mutableStateOf(null)
 
     // ====== 语音输入模式状态 ======
     var isVoiceMode: Boolean by mutableStateOf(false) // 是否处于语音输入模式（替换文本输入框为"按住说话"按钮）

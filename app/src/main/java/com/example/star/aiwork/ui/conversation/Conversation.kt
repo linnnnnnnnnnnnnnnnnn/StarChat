@@ -107,7 +107,7 @@ import kotlinx.coroutines.flow.map
  * @param streamResponse 是否流式传输 AI 响应或等待完整响应。
  * @param onUpdateSettings 更新模型设置（温度、最大 Token 数、流式响应）的回调。
  * @param onUpdateFallbackSettings 更新兜底模型设置（启用状态、Provider ID、Model ID）的回调。
- * @param retrieveKnowledge 检索知识库的回调函数。
+ * @param retrieveKnowledge 检索知识库的回调函数（已移除知识库功能，始终返回空字符串）。
  * @param currentSessionId 当前会话 ID，用于消息持久化
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)

@@ -86,11 +86,8 @@ class NavActivity : AppCompatActivity() {
                     val drawerState = rememberDrawerState(initialValue = Closed)
                     val drawerOpen by mainViewModel.drawerShouldBeOpened.collectAsStateWithLifecycle()
 
-                    val agents by mainViewModel.agents.collectAsStateWithLifecycle()
                     val sessions by chatViewModel.sessions.collectAsStateWithLifecycle() // 保留订阅，用于回调函数
                     val currentSession by chatViewModel.currentSession.collectAsStateWithLifecycle()
-                    val knownKnowledgeBases by mainViewModel.knownKnowledgeBases.collectAsStateWithLifecycle()
-                    val isRagEnabled by mainViewModel.isRagEnabled.collectAsStateWithLifecycle()
 
                     // 记录当前选中的菜单项
                     var selectedMenu by remember { mutableStateOf("composers") }
@@ -105,14 +102,6 @@ class NavActivity : AppCompatActivity() {
                     var showDeleteAllSessionsDialog by remember { mutableStateOf(false) }
 
 
-                    // PDF 选择器
-                    val pdfLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.GetContent()
-                    ) { uri: Uri? ->
-                        if (uri != null) {
-                            mainViewModel.indexPdf(uri)
-                        }
-                    }
 
                     // 监听 ViewModel 中的打开菜单请求
                     if (drawerOpen) {
@@ -128,20 +117,6 @@ class NavActivity : AppCompatActivity() {
                         }
                     }
 
-                    // 监听会话变化，恢复 Active Agent
-                    LaunchedEffect(currentSession, agents) {
-                        currentSession?.let { session ->
-                            val uiState = chatViewModel.getOrCreateSessionUiState(session.id, session.name)
-                            val savedAgentId = session.metadata.agentId
-                            if (savedAgentId != null) {
-                                val agent = agents.find { it.id == savedAgentId }
-                                if (agent != null) {
-                                    uiState.activeAgent = agent
-                                }
-                            }
-                        }
-                    }
-
                     // 协程作用域，用于处理 UI 事件中的挂起函数 (如关闭菜单)
                     val scope = rememberCoroutineScope()
 
@@ -149,10 +124,7 @@ class NavActivity : AppCompatActivity() {
                     JetchatDrawer(
                         drawerState = drawerState,
                         selectedMenu = currentSession?.id ?: "",
-                        agents = agents,
                         sessions = sessions,
-                        knownKnowledgeBases = knownKnowledgeBases,
-                        isRagEnabled = isRagEnabled,
                         onChatClicked = { sessionId ->
                             val session = sessions.find { it.id == sessionId }
                             if (session != null) {
@@ -169,42 +141,6 @@ class NavActivity : AppCompatActivity() {
                             scope.launch {
                                 drawerState.close()
                             }
-                        },
-                        onAgentClicked = { agent ->
-                            // 当点击 Agent 时，更新 UI 状态中的 activeAgent，以便后续请求带上此 Prompt
-                            // 注意：系统提示词会在后续的 AI 请求中自动使用，不需要单独添加系统消息
-                            
-                            currentSession?.let { session ->
-                                val uiState = chatViewModel.getOrCreateSessionUiState(session.id, session.name)
-                                uiState.activeAgent = agent
-                                
-                                // 保存关联关系到数据库
-                                chatViewModel.updateSessionAgent(session.id, agent.id)
-                            }
-                            
-                            // 关闭抽屉并导航回聊天
-                            findNavController().popBackStack(R.id.nav_home, false)
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
-                        onAgentDelete = { agent ->
-                            mainViewModel.removeAgent(agent.id)
-                        },
-                        onPromptMarketClicked = {
-                            findNavController().navigate(R.id.nav_market)
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
-                        onImportPdfClicked = {
-                            pdfLauncher.launch("application/pdf")
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
-                        onDeleteKnowledgeBase = { filename ->
-                             mainViewModel.deleteKnowledgeBase(filename)
                         },
                         onNewChatClicked = {
                             scope.launch {
@@ -263,9 +199,6 @@ class NavActivity : AppCompatActivity() {
                         },
                         onDeleteAllSessions = {
                             showDeleteAllSessionsDialog = true
-                        },
-                        onRagEnabledChanged = { isEnabled ->
-                            mainViewModel.updateRagEnabled(isEnabled)
                         },
                         onRealtimeChatClicked = {
                             findNavController().navigate(R.id.nav_realtime_chat)

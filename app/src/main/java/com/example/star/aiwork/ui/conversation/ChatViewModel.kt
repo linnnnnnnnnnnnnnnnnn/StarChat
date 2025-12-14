@@ -244,33 +244,6 @@ class ChatViewModel(
         _draft.value = null
     }
     
-    /**
-     * 更新会话的关联 Agent
-     */
-    fun updateSessionAgent(sessionId: String, agentId: String?) {
-        viewModelScope.launch {
-            // 优先使用 currentSession，如果不是当前会话则从数据库查询
-            val session = if (_currentSession.value?.id == sessionId) {
-                _currentSession.value
-            } else {
-                // 从数据库查询会话（更可靠，不依赖内存中的 sessions 列表）
-                getSessionListUseCase().firstOrNull()?.find { it.id == sessionId }
-            }
-
-            if (session != null) {
-                val newMetadata = session.metadata.copy(agentId = agentId)
-                val updatedSession = session.copy(metadata = newMetadata, updatedAt = System.currentTimeMillis())
-                
-                createSessionUseCase(updatedSession) // 使用 createSessionUseCase 进行更新 (upsert)
-                
-                if (_currentSession.value?.id == sessionId) {
-                    _currentSession.value = updatedSession
-                }
-                // 更新 UI State 中的 agent (由 NavActivity 观察并设置，但这里最好也触发一下)
-                // NavActivity 会监听 currentSession 的变化并处理 UI 更新
-            }
-        }
-    }
 
     fun renameSession(newName: String) {
         viewModelScope.launch {

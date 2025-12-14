@@ -28,7 +28,6 @@ import com.example.star.aiwork.ui.conversation.logic.MemoryBuffer
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
-import com.example.star.aiwork.ui.conversation.logic.AutoLoopHandler
 import com.example.star.aiwork.ui.conversation.logic.ImageGenerationHandler
 import com.example.star.aiwork.ui.conversation.logic.MemoryTriggerFilter
 import com.example.star.aiwork.ui.conversation.logic.MessageConstructionHelper
@@ -47,13 +46,12 @@ import java.util.UUID
 
 /**
  * Handles the business logic for processing messages in the conversation.
- * Includes sending messages to AI providers, handling fallbacks, and autolooping agents.
+ * Includes sending messages to AI providers and handling fallbacks.
  * 
  * Refactored to delegate responsibilities to smaller handlers:
  * - ImageGenerationHandler
  * - StreamingResponseHandler
  * - RollbackHandler
- * - AutoLoopHandler
  * - MessageConstructionHelper
  */
 class ConversationLogic(
@@ -182,15 +180,6 @@ class ConversationLogic(
         authorMe = authorMe,
         timeNow = timeNow,
         onMessageIdCreated = { messageId -> currentStreamingMessageId = messageId }
-    )
-
-    private val autoLoopHandler = AutoLoopHandler(
-        uiState = uiState,
-        sendMessageUseCase = sendMessageUseCase,
-        messageRepository = messageRepository,
-        getProviderSettings = getProviderSettings,
-        sessionId = sessionId,
-        timeNow = timeNow
     )
 
     // 创建 MemoryBuffer，当 buffer 满了时触发批量处理
@@ -488,13 +477,11 @@ class ConversationLogic(
 
         // 2. Save User Message to Repository
         // 注意：用户消息的保存现在由 SendMessageUseCase 负责，这里不再重复保存
-        // 但需要处理图片URI和Auto-Loop的情况
         val userMessageTimestamp = System.currentTimeMillis()
         if (!isRetry && !isAutoTriggered) {
-            // 清空选中的图片URI（图片会在 SendMessageUseCase 中通过 ChatDataItem 保存）
+            // 清空选中的图片URI（保留UI状态，但不处理图片功能）
             uiState.selectedImageUri = null
         }
-        // Auto-Loop 的消息会在 SendMessageUseCase 中保存，这里不需要单独处理
 
         // 3. Call LLM or Image Generation
         if (providerSetting != null && model != null) {
@@ -511,7 +498,6 @@ class ConversationLogic(
                     authorMe = authorMe,
                     inputContent = inputContent,
                     isAutoTriggered = isAutoTriggered,
-                    activeAgent = uiState.activeAgent,
                     retrieveKnowledge = retrieveKnowledge,
                     context = context,
                     messageRepository = messageRepository,
@@ -629,20 +615,6 @@ class ConversationLogic(
                     uiState.activeTaskId = null
                 }
 
-                // --- Auto-Loop Logic with Planner ---
-                if (uiState.isAutoLoopEnabled && loopCount < uiState.maxLoopCount && fullResponse.isNotBlank()) {
-                    autoLoopHandler.handleAutoLoop(
-                        fullResponse = fullResponse,
-                        loopCount = loopCount,
-                        currentProviderSetting = providerSetting,
-                        currentModel = model,
-                        retrieveKnowledge = retrieveKnowledge,
-                        onProcessMessage = { content, pSetting, mod, auto, count, knowledge ->
-                            processMessage(content, pSetting, mod, auto, count, knowledge)
-                        }
-                    )
-                }
-
             } catch (e: Exception) {
                 handleError(e, inputContent, providerSetting, model, isAutoTriggered, loopCount, retrieveKnowledge, isRetry)
             }
@@ -729,40 +701,6 @@ class ConversationLogic(
                 return
             } else {
                 Log.w("ConversationLogic", "⚠️ Fallback skipped: Provider/Model not found or same as current.")
-            }
-        } else if (!isRetry) {
-            Log.d("ConversationLogic", "🔍 Checking default Ollama fallback...")
-            // 尝试默认的 Ollama 兜底，如果用户没有配置特定兜底模型，但有本地模型可用
-            // 且当前不是 Ollama
-            val isCurrentOllama = providerSetting is ProviderSetting.Ollama
-            if (!isCurrentOllama) {
-                val ollamaProvider = getProviderSettings().find { it is ProviderSetting.Ollama }
-                if (ollamaProvider != null && ollamaProvider.models.isNotEmpty()) {
-                    Log.i("ConversationLogic", "✅ Triggering default Ollama fallback...")
-                    withContext(Dispatchers.IO) {
-                        val messageId = currentStreamingMessageId
-                        if (messageId != null) {
-                            updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
-                        }
-                        saveMessageToRepository(
-                            Message("System", "Request failed (${e.message}). Fallback to local Ollama...", timeNow)
-                        )
-                    }
-                    processMessage(
-                        inputContent = inputContent,
-                        providerSetting = ollamaProvider,
-                        model = ollamaProvider.models.first(),
-                        isAutoTriggered = isAutoTriggered,
-                        loopCount = loopCount,
-                        retrieveKnowledge = retrieveKnowledge,
-                        isRetry = true
-                    )
-                    return
-                } else {
-                     Log.d("ConversationLogic", "⚠️ No Ollama provider found or it has no models.")
-                }
-            } else {
-                Log.d("ConversationLogic", "⚠️ Current provider is already Ollama.")
             }
         } else {
             Log.d("ConversationLogic", "Skipping configured fallback (retry or disabled or missing config).")

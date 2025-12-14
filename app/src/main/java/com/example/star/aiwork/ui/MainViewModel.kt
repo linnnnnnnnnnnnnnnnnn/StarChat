@@ -22,16 +22,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
-import androidx.room.Room
-import com.example.star.aiwork.data.AgentRepository
 import com.example.star.aiwork.data.UserPreferencesRepository
-import com.example.star.aiwork.data.database.AppDatabase
-import com.example.star.aiwork.data.database.LocalRAGService
 import com.example.star.aiwork.data.local.datasource.session.SessionCacheDataSource
 import com.example.star.aiwork.data.local.datasource.session.SessionLocalDataSourceImpl
 import com.example.star.aiwork.data.repository.SessionRepositoryImpl
 import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
-import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.session.DeleteAllSessionsUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,16 +43,12 @@ import kotlinx.coroutines.launch
  * - 侧边栏 (Drawer) 的开闭状态。
  * - 用户配置的 AI 提供商设置 [ProviderSetting]。
  * - 全局 AI 模型参数 (Temperature, Max Tokens, Stream Response)。
- * - 角色市场/Prompt预设
  * - 当前激活的 Provider 和 Model
  *
  * @property userPreferencesRepository 用户偏好仓库，用于持久化数据的读写。
- * @property agentRepository 角色/Prompt仓库。
  */
 class MainViewModel(
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val agentRepository: AgentRepository,
-    val ragService: LocalRAGService,
     private val deleteAllSessionsUseCase: DeleteAllSessionsUseCase
 ) : ViewModel() {
 
@@ -104,13 +95,6 @@ class MainViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = true
-        )
-
-    val agents: StateFlow<List<Agent>> = agentRepository.agents
-        .stateIn(
-             scope = viewModelScope,
-             started = SharingStarted.WhileSubscribed(5000),
-             initialValue = emptyList()
         )
 
     /**
@@ -163,19 +147,6 @@ class MainViewModel(
             initialValue = true
         )
         
-    val knownKnowledgeBases: StateFlow<List<String>> = ragService.knownFiles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-        
-    val isRagEnabled: StateFlow<Boolean> = userPreferencesRepository.isRagEnabled
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = true
-        )
 
     /**
      * 用户自定义头像 URI。
@@ -186,12 +157,6 @@ class MainViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
-
-    init {
-        viewModelScope.launch {
-            agentRepository.loadAgents()
-        }
-    }
 
     /**
      * 请求打开侧边栏。
@@ -268,10 +233,8 @@ class MainViewModel(
                 // 这里肯定会变化，因为我们更新了 lastUsedTime
                 val updatedProvider = when (provider) {
                     is ProviderSetting.OpenAI -> provider.copy(models = updatedModels)
-                    is ProviderSetting.Ollama -> provider.copy(models = updatedModels)
                     is ProviderSetting.Google -> provider.copy(models = updatedModels)
                     is ProviderSetting.Claude -> provider.copy(models = updatedModels)
-                    is ProviderSetting.Dify -> provider.copy(models = updatedModels)
                 }
                 
                 val newSettings = currentSettings.map {
@@ -300,42 +263,6 @@ class MainViewModel(
             userPreferencesRepository.updateFallbackEnabled(isEnabled)
         }
     }
-    
-    fun addAgent(agent: Agent) {
-        viewModelScope.launch {
-            agentRepository.addAgent(agent)
-        }
-    }
-
-    fun updateAgent(agent: Agent) {
-        viewModelScope.launch {
-            agentRepository.updateAgent(agent)
-        }
-    }
-
-    fun removeAgent(agentId: String) {
-        viewModelScope.launch {
-            agentRepository.removeAgent(agentId)
-        }
-    }
-
-    fun indexPdf(uri: Uri) {
-        viewModelScope.launch {
-             ragService.indexPdf(uri)
-        }
-    }
-    
-    fun deleteKnowledgeBase(filename: String) {
-        viewModelScope.launch {
-            ragService.deleteKnowledgeBase(filename)
-        }
-    }
-    
-    fun updateRagEnabled(isEnabled: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.updateRagEnabled(isEnabled)
-        }
-    }
 
     fun deleteAllSessions() {
         viewModelScope.launch {
@@ -344,14 +271,10 @@ class MainViewModel(
     }
     
     /**
-     * 检索知识库中的相关上下文
+     * 检索知识库中的相关上下文（已移除知识库功能，返回空字符串）
      */
     suspend fun retrieveKnowledge(query: String): String {
-        return if (isRagEnabled.value) {
-            ragService.retrieve(query).context
-        } else {
-            ""
-        }
+        return ""
     }
 
     /**
@@ -378,14 +301,6 @@ class MainViewModel(
             ): T {
                 // 从 extras 中获取 Application 对象
                 val application = checkNotNull(extras[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY])
-                
-                // 初始化数据库 (通常应该在 Application 中做单例，这里简化)
-                val db = Room.databaseBuilder(
-                    application,
-                    AppDatabase::class.java, "aiwork-database"
-                ).build()
-                
-                val ragService = LocalRAGService(application, db.knowledgeDao())
 
                 // Create Repository
                 val sessionLocalDataSource = SessionLocalDataSourceImpl(application)
@@ -395,8 +310,6 @@ class MainViewModel(
 
                 return MainViewModel(
                     UserPreferencesRepository(application),
-                    AgentRepository(application),
-                    ragService,
                     deleteAllSessionsUseCase
                 ) as T
             }
