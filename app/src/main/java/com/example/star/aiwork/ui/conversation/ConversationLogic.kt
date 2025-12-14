@@ -703,40 +703,6 @@ class ConversationLogic(
             } else {
                 Log.w("ConversationLogic", "⚠️ Fallback skipped: Provider/Model not found or same as current.")
             }
-        } else if (!isRetry) {
-            Log.d("ConversationLogic", "🔍 Checking default Ollama fallback...")
-            // 尝试默认的 Ollama 兜底，如果用户没有配置特定兜底模型，但有本地模型可用
-            // 且当前不是 Ollama
-            val isCurrentOllama = providerSetting is ProviderSetting.Ollama
-            if (!isCurrentOllama) {
-                val ollamaProvider = getProviderSettings().find { it is ProviderSetting.Ollama }
-                if (ollamaProvider != null && ollamaProvider.models.isNotEmpty()) {
-                    Log.i("ConversationLogic", "✅ Triggering default Ollama fallback...")
-                    withContext(Dispatchers.IO) {
-                        val messageId = currentStreamingMessageId
-                        if (messageId != null) {
-                            updateMessageInRepository(messageId, messageRepository?.getMessage(messageId)?.content ?: "", isLoading = false)
-                        }
-                        saveMessageToRepository(
-                            Message("System", "Request failed (${e.message}). Fallback to local Ollama...", timeNow)
-                        )
-                    }
-                    processMessage(
-                        inputContent = inputContent,
-                        providerSetting = ollamaProvider,
-                        model = ollamaProvider.models.first(),
-                        isAutoTriggered = isAutoTriggered,
-                        loopCount = loopCount,
-                        retrieveKnowledge = retrieveKnowledge,
-                        isRetry = true
-                    )
-                    return
-                } else {
-                     Log.d("ConversationLogic", "⚠️ No Ollama provider found or it has no models.")
-                }
-            } else {
-                Log.d("ConversationLogic", "⚠️ Current provider is already Ollama.")
-            }
         } else {
             Log.d("ConversationLogic", "Skipping configured fallback (retry or disabled or missing config).")
         }

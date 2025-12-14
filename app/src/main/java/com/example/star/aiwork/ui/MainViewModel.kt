@@ -268,7 +268,6 @@ class MainViewModel(
                 // 这里肯定会变化，因为我们更新了 lastUsedTime
                 val updatedProvider = when (provider) {
                     is ProviderSetting.OpenAI -> provider.copy(models = updatedModels)
-                    is ProviderSetting.Ollama -> provider.copy(models = updatedModels)
                     is ProviderSetting.Google -> provider.copy(models = updatedModels)
                     is ProviderSetting.Claude -> provider.copy(models = updatedModels)
                     is ProviderSetting.Dify -> provider.copy(models = updatedModels)

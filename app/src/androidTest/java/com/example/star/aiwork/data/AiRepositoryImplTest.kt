@@ -32,7 +32,7 @@ class AiRepositoryImplTest {
 
         val history: List<ChatDataItem> = emptyList()
         val providerSetting: ProviderSetting =
-            ProviderSetting.Ollama(models = emptyList())
+            ProviderSetting.Google(models = emptyList())
         val params = TextGenerationParams(model = Model())
         val taskId = "test-task"
 

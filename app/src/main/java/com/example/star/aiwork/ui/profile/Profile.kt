@@ -36,7 +36,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.example.star.aiwork.data.provider.GoogleProvider
-import com.example.star.aiwork.data.provider.OllamaProvider
 import com.example.star.aiwork.data.provider.OpenAIProvider
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
@@ -73,13 +72,6 @@ fun ProfileScreen(
                         name = "New OpenAI",
                         apiKey = "",
                         baseUrl = "https://api.openai.com/v1"
-                    )
-                    "Ollama" -> ProviderSetting.Ollama(
-                        id = UUID.randomUUID().toString(),
-                        name = "New Ollama",
-                        apiKey = "ollama",
-                        baseUrl = "http://localhost:11434",
-                        chatCompletionsPath = "/api/chat"
                     )
                     "Google" -> ProviderSetting.Google(
                         id = UUID.randomUUID().toString(),
@@ -176,11 +168,6 @@ fun AddProviderDialog(
                 ListItem(
                     headlineContent = { Text("OpenAI Compatible") },
                     modifier = Modifier.clickable { onAdd("OpenAI") }
-                )
-                HorizontalDivider()
-                ListItem(
-                    headlineContent = { Text("Ollama (Local)") },
-                    modifier = Modifier.clickable { onAdd("Ollama") }
                 )
                 HorizontalDivider()
                 ListItem(
@@ -390,7 +377,6 @@ fun ProviderCard(
         mutableStateOf(
             when (provider) {
                 is ProviderSetting.OpenAI -> provider.apiKey
-                is ProviderSetting.Ollama -> provider.apiKey
                 is ProviderSetting.Google -> provider.apiKey
                 is ProviderSetting.Claude -> provider.apiKey
                 is ProviderSetting.Dify -> provider.apiKey
@@ -401,7 +387,6 @@ fun ProviderCard(
         mutableStateOf(
             when (provider) {
                 is ProviderSetting.OpenAI -> provider.baseUrl
-                is ProviderSetting.Ollama -> provider.baseUrl
                 is ProviderSetting.Google -> provider.baseUrl
                 is ProviderSetting.Claude -> provider.baseUrl
                 is ProviderSetting.Dify -> provider.baseUrl
@@ -461,7 +446,6 @@ fun ProviderCard(
                             onUpdate(
                                 when (provider) {
                                     is ProviderSetting.OpenAI -> provider.copy(enabled = enabled)
-                                    is ProviderSetting.Ollama -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Google -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Claude -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Dify -> provider.copy(enabled = enabled)
@@ -568,7 +552,6 @@ fun ProviderCard(
                                     try {
                                         val tempSetting = when (provider) {
                                             is ProviderSetting.OpenAI -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
-                                            is ProviderSetting.Ollama -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             is ProviderSetting.Google -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             is ProviderSetting.Claude -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             is ProviderSetting.Dify -> provider.copy(
@@ -584,13 +567,6 @@ fun ProviderCard(
                                             val client = OkHttpClient()
                                             val openAIProvider = OpenAIProvider(client)
                                             val models = openAIProvider.listModels(tempSetting)
-                                            
-                                            onUpdate(tempSetting.copy(name = name, models = models))
-                                            Toast.makeText(context, "已刷新! 发现 ${models.size} 个模型", Toast.LENGTH_SHORT).show()
-                                        } else if (tempSetting is ProviderSetting.Ollama) {
-                                            val client = OkHttpClient()
-                                            val ollamaProvider = OllamaProvider(client)
-                                            val models = ollamaProvider.listModels(tempSetting)
                                             
                                             onUpdate(tempSetting.copy(name = name, models = models))
                                             Toast.makeText(context, "已刷新! 发现 ${models.size} 个模型", Toast.LENGTH_SHORT).show()

@@ -206,7 +206,7 @@ fun ModelSettingsDialog(
                     Text("Fallback Provider:", style = MaterialTheme.typography.bodyMedium)
                     Box(modifier = Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart)) {
                         OutlinedButton(onClick = { expandedFallbackProvider = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(selectedFallbackProvider?.name ?: "默认本地ollama")
+                            Text(selectedFallbackProvider?.name ?: "无")
                             Spacer(modifier = Modifier.weight(1f))
                             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                         }
@@ -215,7 +215,7 @@ fun ModelSettingsDialog(
                             onDismissRequest = { expandedFallbackProvider = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("默认本地ollama") },
+                                text = { Text("无") },
                                 onClick = {
                                     uiState.fallbackProviderId = null
                                     uiState.fallbackModelId = null
