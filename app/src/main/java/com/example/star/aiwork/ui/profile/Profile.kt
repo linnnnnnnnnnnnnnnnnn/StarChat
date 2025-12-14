@@ -79,13 +79,6 @@ fun ProfileScreen(
                         apiKey = "",
                         baseUrl = "https://generativelanguage.googleapis.com/v1beta"
                     )
-                    "Dify" -> ProviderSetting.Dify(
-                        id = UUID.randomUUID().toString(),
-                        name = "New Dify",
-                        apiKey = "",
-                        baseUrl = "https://api.dify.ai/v1",
-                        botType = ProviderSetting.DifyBotType.Chat
-                    )
                     else -> null
                 }
                 if (newProvider != null) {
@@ -175,10 +168,6 @@ fun AddProviderDialog(
                     modifier = Modifier.clickable { onAdd("Google") }
                 )
                 HorizontalDivider()
-                ListItem(
-                    headlineContent = { Text("Dify") },
-                    modifier = Modifier.clickable { onAdd("Dify") }
-                )
             }
         },
         confirmButton = {
@@ -379,7 +368,6 @@ fun ProviderCard(
                 is ProviderSetting.OpenAI -> provider.apiKey
                 is ProviderSetting.Google -> provider.apiKey
                 is ProviderSetting.Claude -> provider.apiKey
-                is ProviderSetting.Dify -> provider.apiKey
             }
         ) 
     }
@@ -389,28 +377,10 @@ fun ProviderCard(
                 is ProviderSetting.OpenAI -> provider.baseUrl
                 is ProviderSetting.Google -> provider.baseUrl
                 is ProviderSetting.Claude -> provider.baseUrl
-                is ProviderSetting.Dify -> provider.baseUrl
             }
         )
     }
 
-    var difyBotType by remember(provider) {
-        mutableStateOf(
-            if (provider is ProviderSetting.Dify) provider.botType else ProviderSetting.DifyBotType.Chat
-        )
-    }
-
-    var difyInputVariable by remember(provider) {
-        mutableStateOf(
-            if (provider is ProviderSetting.Dify) provider.inputVariable else ""
-        )
-    }
-    
-    var difyOutputVariable by remember(provider) {
-        mutableStateOf(
-            if (provider is ProviderSetting.Dify) provider.outputVariable else ""
-        )
-    }
 
     var isTesting by remember { mutableStateOf(false) }
 
@@ -448,7 +418,6 @@ fun ProviderCard(
                                     is ProviderSetting.OpenAI -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Google -> provider.copy(enabled = enabled)
                                     is ProviderSetting.Claude -> provider.copy(enabled = enabled)
-                                    is ProviderSetting.Dify -> provider.copy(enabled = enabled)
                                 }
                             )
                         }
@@ -488,47 +457,6 @@ fun ProviderCard(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    if (provider is ProviderSetting.Dify) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Bot Type", style = MaterialTheme.typography.bodySmall)
-                        Column {
-                            ProviderSetting.DifyBotType.entries.forEach { type ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { difyBotType = type }
-                                ) {
-                                    RadioButton(
-                                        selected = (difyBotType == type),
-                                        onClick = { difyBotType = type }
-                                    )
-                                    Text(
-                                        text = type.name,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = difyInputVariable,
-                            onValueChange = { difyInputVariable = it },
-                            label = { Text("Input Variable (Optional)") },
-                            placeholder = { Text("e.g. query") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = difyOutputVariable,
-                            onValueChange = { difyOutputVariable = it },
-                            label = { Text("Output Variable (Optional)") },
-                            placeholder = { Text("e.g. text") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -554,13 +482,6 @@ fun ProviderCard(
                                             is ProviderSetting.OpenAI -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             is ProviderSetting.Google -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
                                             is ProviderSetting.Claude -> provider.copy(apiKey = apiKey, baseUrl = baseUrl)
-                                            is ProviderSetting.Dify -> provider.copy(
-                                                apiKey = apiKey, 
-                                                baseUrl = baseUrl, 
-                                                botType = difyBotType,
-                                                inputVariable = difyInputVariable,
-                                                outputVariable = difyOutputVariable
-                                            )
                                         }
 
                                         if (tempSetting is ProviderSetting.OpenAI) {
@@ -577,15 +498,6 @@ fun ProviderCard(
                                             
                                             onUpdate(tempSetting.copy(name = name, models = models))
                                             Toast.makeText(context, "已刷新! 添加了 Gemini 模型", Toast.LENGTH_SHORT).show()
-                                        } else if (tempSetting is ProviderSetting.Dify) {
-                                            // Dify 暂时手动添加一个默认模型，或者这里做一个简单的 ping 测试
-                                            // 鉴于 Dify API 没有 list models 接口，我们默认添加一个与 App 同名的模型
-                                            val defaultModel = Model(
-                                                modelId = "dify-app",
-                                                displayName = "Dify App",
-                                            )
-                                            onUpdate(tempSetting.copy(name = name, models = listOf(defaultModel)))
-                                            Toast.makeText(context, "已保存! (Dify 不支持列出模型)", Toast.LENGTH_SHORT).show()
                                         } else {
                                              Toast.makeText(context, "Test not supported for this type yet.", Toast.LENGTH_SHORT).show()
                                         }

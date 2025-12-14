@@ -270,7 +270,6 @@ class MainViewModel(
                     is ProviderSetting.OpenAI -> provider.copy(models = updatedModels)
                     is ProviderSetting.Google -> provider.copy(models = updatedModels)
                     is ProviderSetting.Claude -> provider.copy(models = updatedModels)
-                    is ProviderSetting.Dify -> provider.copy(models = updatedModels)
                 }
                 
                 val newSettings = currentSettings.map {
