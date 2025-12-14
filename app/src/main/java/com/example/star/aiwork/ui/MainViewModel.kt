@@ -163,19 +163,6 @@ class MainViewModel(
             initialValue = true
         )
         
-    val knownKnowledgeBases: StateFlow<List<String>> = ragService.knownFiles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
-        
-    val isRagEnabled: StateFlow<Boolean> = userPreferencesRepository.isRagEnabled
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = true
-        )
 
     /**
      * 用户自定义头像 URI。
@@ -317,23 +304,6 @@ class MainViewModel(
         }
     }
 
-    fun indexPdf(uri: Uri) {
-        viewModelScope.launch {
-             ragService.indexPdf(uri)
-        }
-    }
-    
-    fun deleteKnowledgeBase(filename: String) {
-        viewModelScope.launch {
-            ragService.deleteKnowledgeBase(filename)
-        }
-    }
-    
-    fun updateRagEnabled(isEnabled: Boolean) {
-        viewModelScope.launch {
-            userPreferencesRepository.updateRagEnabled(isEnabled)
-        }
-    }
 
     fun deleteAllSessions() {
         viewModelScope.launch {
@@ -342,14 +312,10 @@ class MainViewModel(
     }
     
     /**
-     * 检索知识库中的相关上下文
+     * 检索知识库中的相关上下文（已移除知识库功能，返回空字符串）
      */
     suspend fun retrieveKnowledge(query: String): String {
-        return if (isRagEnabled.value) {
-            ragService.retrieve(query).context
-        } else {
-            ""
-        }
+        return ""
     }
 
     /**

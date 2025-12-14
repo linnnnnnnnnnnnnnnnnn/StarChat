@@ -89,8 +89,6 @@ class NavActivity : AppCompatActivity() {
                     val agents by mainViewModel.agents.collectAsStateWithLifecycle()
                     val sessions by chatViewModel.sessions.collectAsStateWithLifecycle() // 保留订阅，用于回调函数
                     val currentSession by chatViewModel.currentSession.collectAsStateWithLifecycle()
-                    val knownKnowledgeBases by mainViewModel.knownKnowledgeBases.collectAsStateWithLifecycle()
-                    val isRagEnabled by mainViewModel.isRagEnabled.collectAsStateWithLifecycle()
 
                     // 记录当前选中的菜单项
                     var selectedMenu by remember { mutableStateOf("composers") }
@@ -105,14 +103,6 @@ class NavActivity : AppCompatActivity() {
                     var showDeleteAllSessionsDialog by remember { mutableStateOf(false) }
 
 
-                    // PDF 选择器
-                    val pdfLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.GetContent()
-                    ) { uri: Uri? ->
-                        if (uri != null) {
-                            mainViewModel.indexPdf(uri)
-                        }
-                    }
 
                     // 监听 ViewModel 中的打开菜单请求
                     if (drawerOpen) {
@@ -151,8 +141,6 @@ class NavActivity : AppCompatActivity() {
                         selectedMenu = currentSession?.id ?: "",
                         agents = agents,
                         sessions = sessions,
-                        knownKnowledgeBases = knownKnowledgeBases,
-                        isRagEnabled = isRagEnabled,
                         onChatClicked = { sessionId ->
                             val session = sessions.find { it.id == sessionId }
                             if (session != null) {
@@ -196,15 +184,6 @@ class NavActivity : AppCompatActivity() {
                             scope.launch {
                                 drawerState.close()
                             }
-                        },
-                        onImportPdfClicked = {
-                            pdfLauncher.launch("application/pdf")
-                            scope.launch {
-                                drawerState.close()
-                            }
-                        },
-                        onDeleteKnowledgeBase = { filename ->
-                             mainViewModel.deleteKnowledgeBase(filename)
                         },
                         onNewChatClicked = {
                             scope.launch {
@@ -263,9 +242,6 @@ class NavActivity : AppCompatActivity() {
                         },
                         onDeleteAllSessions = {
                             showDeleteAllSessionsDialog = true
-                        },
-                        onRagEnabledChanged = { isEnabled ->
-                            mainViewModel.updateRagEnabled(isEnabled)
                         },
                         onRealtimeChatClicked = {
                             findNavController().navigate(R.id.nav_realtime_chat)

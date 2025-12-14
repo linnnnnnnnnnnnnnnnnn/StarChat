@@ -1,16 +1,7 @@
 package com.example.star.aiwork.data.database
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
-import com.tom_roush.pdfbox.pdmodel.PDDocument
-import com.tom_roush.pdfbox.text.PDFTextStripper
-import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.InputStream
 
 data class RetrievalResult(
     val context: String,
@@ -18,142 +9,7 @@ data class RetrievalResult(
 )
 
 class LocalRAGService(private val context: Context, private val dao: KnowledgeDao) {
-
-    init {
-        try {
-            PDFBoxResourceLoader.init(context)
-        } catch (e: Exception) {
-            Log.e("LocalRAGService", "Failed to init PDFBox", e)
-        }
-    }
     
-    val knownFiles: Flow<List<String>> = dao.getDistinctSourceFilenames()
-
-    // 1. 解析 PDF 并切片
-    suspend fun indexPdf(uri: Uri) = withContext(Dispatchers.IO) {
-        var tempFile: File? = null
-        try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-            if (inputStream == null) {
-                Log.e("LocalRAGService", "Cannot open input stream for URI: $uri")
-                return@withContext
-            }
-
-            // Create a temporary file
-            tempFile = File.createTempFile("pdf_import_", ".pdf", context.cacheDir)
-            
-            // Copy inputStream to tempFile
-            inputStream.use { input ->
-                tempFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-
-            // 使用 PDFBox 加载
-            val document = PDDocument.load(tempFile)
-            
-            try {
-                val stripper = PDFTextStripper()
-                stripper.sortByPosition = true 
-                
-                // 提取全文
-                val fullText = stripper.getText(document)
-
-                if (fullText.isBlank()) {
-                    Log.w("LocalRAGService", "PDF content is empty")
-                    return@withContext
-                }
-
-                // 切片
-                val chunks = splitTextIntoChunks(fullText, chunkSize = 500)
-                
-                // 存入数据库
-                val fileName = getFileName(uri)
-                val entities = chunks.map { 
-                    KnowledgeChunk(sourceFilename = fileName, content = it) 
-                }
-                dao.insertChunks(entities)
-                Log.d("LocalRAGService", "Indexed ${entities.size} chunks from $fileName")
-            } finally {
-                document.close()
-            }
-            
-        } catch (e: Exception) {
-            Log.e("LocalRAGService", "Error indexing PDF", e)
-        } finally {
-            try {
-                tempFile?.delete()
-            } catch (e: Exception) {
-                Log.w("LocalRAGService", "Failed to delete temp file", e)
-            }
-        }
-    }
-    
-    suspend fun deleteKnowledgeBase(filename: String) {
-        dao.deleteBySourceFilename(filename)
-    }
-
-    private fun splitTextIntoChunks(text: String, chunkSize: Int): List<String> {
-        val paragraphs = text.split(Regex("\\n\\s*\\n"))
-        val chunks = mutableListOf<String>()
-        var currentChunk = StringBuilder()
-
-        for (paragraph in paragraphs) {
-            val cleanedPara = paragraph.trim()
-            if (cleanedPara.isEmpty()) continue
-
-            if (currentChunk.length + cleanedPara.length > chunkSize) {
-                if (currentChunk.isNotEmpty()) {
-                    chunks.add(currentChunk.toString().trim())
-                    currentChunk = StringBuilder()
-                }
-                
-                if (cleanedPara.length > chunkSize) {
-                     cleanedPara.chunked(chunkSize).forEach { 
-                         chunks.add(it)
-                     }
-                } else {
-                    currentChunk.append(cleanedPara).append("\n\n")
-                }
-            } else {
-                currentChunk.append(cleanedPara).append("\n\n")
-            }
-        }
-        if (currentChunk.isNotEmpty()) {
-            chunks.add(currentChunk.toString().trim())
-        }
-        
-        if (chunks.isEmpty() && text.isNotEmpty()) {
-            return text.chunked(chunkSize)
-        }
-        
-        return chunks
-    }
-    
-    private fun getFileName(uri: Uri): String {
-        var result: String? = null
-        if (uri.scheme == "content") {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            try {
-                if (cursor != null && cursor.moveToFirst()) {
-                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (index != -1) {
-                        result = cursor.getString(index)
-                    }
-                }
-            } finally {
-                cursor?.close()
-            }
-        }
-        if (result == null) {
-            result = uri.path
-            val cut = result?.lastIndexOf('/')
-            if (cut != null && cut != -1) {
-                result = result?.substring(cut + 1)
-            }
-        }
-        return result ?: "unknown_file.pdf"
-    }
 
     // 2. 检索 (Recall + Re-rank)
     suspend fun retrieve(query: String): RetrievalResult {
