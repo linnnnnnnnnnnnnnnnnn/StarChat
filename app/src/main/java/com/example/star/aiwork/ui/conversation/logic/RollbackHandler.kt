@@ -8,11 +8,8 @@ import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
+import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
 import com.example.star.aiwork.domain.repository.MessageRepository
-import com.example.star.aiwork.domain.model.MessageEntity
-import com.example.star.aiwork.domain.model.MessageType
-import com.example.star.aiwork.domain.model.MessageStatus
-import com.example.star.aiwork.domain.model.MessageMetadata
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import com.example.star.aiwork.ui.conversation.Message
 import kotlinx.coroutines.flow.first
@@ -26,6 +23,7 @@ import kotlinx.coroutines.withContext
 class RollbackHandler(
     private val uiState: ConversationUiState,
     private val rollbackMessageUseCase: RollbackMessageUseCase,
+    private val saveMessageUseCase: SaveMessageUseCase,
     private val messageRepository: MessageRepository?,
     private val streamingResponseHandler: StreamingResponseHandler,
     private val sessionId: String,
@@ -33,27 +31,6 @@ class RollbackHandler(
     private val timeNow: String,
     private val onMessageIdCreated: ((String) -> Unit)? = null
 ) {
-    
-    private suspend fun saveMessageToRepository(message: Message): String {
-        val messageId = java.util.UUID.randomUUID().toString()
-        val role = when (message.author) {
-            authorMe -> MessageRole.USER
-            "AI", "assistant", "model" -> MessageRole.ASSISTANT
-            "System", "system" -> MessageRole.SYSTEM
-            else -> MessageRole.USER
-        }
-        val entity = MessageEntity(
-            id = messageId,
-            sessionId = sessionId,
-            role = role,
-            type = if (role == MessageRole.SYSTEM) MessageType.SYSTEM else MessageType.TEXT,
-            content = message.content,
-            createdAt = System.currentTimeMillis(),
-            status = if (message.isLoading) MessageStatus.STREAMING else MessageStatus.DONE
-        )
-        messageRepository?.upsertMessage(entity)
-        return messageId
-    }
 
     suspend fun rollbackAndRegenerate(
         providerSetting: ProviderSetting?,
@@ -135,7 +112,13 @@ class RollbackHandler(
                             messageRepository?.deleteMessage(it.id)
                         }
                         // 创建新的空消息用于流式输出
-                        val messageId = saveMessageToRepository(Message("AI", "", timeNow, isLoading = true))
+                        val messageId = saveMessageUseCase.saveFromUIMessage(
+                            sessionId = sessionId,
+                            author = "AI",
+                            content = "",
+                            isLoading = true,
+                            authorMe = authorMe
+                        )
                         onMessageIdCreated?.invoke(messageId)
                     }
 

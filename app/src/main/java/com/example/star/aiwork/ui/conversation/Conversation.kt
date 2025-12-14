@@ -55,6 +55,10 @@ import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
+import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
+import com.example.star.aiwork.domain.usecase.HandleErrorUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
+import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import com.example.star.aiwork.ui.theme.JetchatTheme
@@ -456,6 +460,11 @@ fun ConversationPreview() {
         val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
         val updateMessageUseCase = UpdateMessageUseCase(messageRepository, sessionRepository)
 
+        val saveMessageUseCase = SaveMessageUseCase(messageRepository, sessionRepository)
+        val getHistoryMessagesUseCase = GetHistoryMessagesUseCase(messageRepository)
+        val shouldSaveAsMemoryUseCase = ShouldSaveAsMemoryUseCase()
+        val handleErrorUseCase = HandleErrorUseCase(messageRepository, updateMessageUseCase)
+        
         val previewLogic = ConversationLogic(
             uiState = exampleUiState,
             context = context,
@@ -466,6 +475,9 @@ fun ConversationPreview() {
             rollbackMessageUseCase = rollbackMessageUseCase,
             imageGenerationUseCase = imageGenerationUseCase,
             updateMessageUseCase = updateMessageUseCase,
+            saveMessageUseCase = saveMessageUseCase,
+            getHistoryMessagesUseCase = getHistoryMessagesUseCase,
+            shouldSaveAsMemoryUseCase = shouldSaveAsMemoryUseCase,
             sessionId = "123",
             getProviderSettings = { emptyList() },
             messageRepository = messageRepository,
@@ -477,7 +489,8 @@ fun ConversationPreview() {
             searchEmbeddingUseCase = null,
             saveEmbeddingUseCase = null,
             filterMemoryMessagesUseCase = null,
-            processBufferFullUseCase = null
+            processBufferFullUseCase = null,
+            handleErrorUseCase = handleErrorUseCase
         )
 
         ConversationContent(

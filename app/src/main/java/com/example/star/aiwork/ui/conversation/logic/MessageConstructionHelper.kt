@@ -4,14 +4,13 @@ import android.content.Context
 import android.util.Log
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
-import com.example.star.aiwork.domain.repository.MessageRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
 import com.example.star.aiwork.ui.ai.UIMessage
 import com.example.star.aiwork.ui.ai.UIMessagePart
 import com.example.star.aiwork.ui.conversation.ConversationUiState
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -31,7 +30,7 @@ object MessageConstructionHelper {
         isAutoTriggered: Boolean,
         retrieveKnowledge: suspend (String) -> String,
         context: Context,
-        messageRepository: MessageRepository?,
+        getHistoryMessagesUseCase: GetHistoryMessagesUseCase?,
         sessionId: String,
         computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
         searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
@@ -45,7 +44,7 @@ object MessageConstructionHelper {
             null,
             retrieveKnowledge,
             context,
-            messageRepository,
+            getHistoryMessagesUseCase,
             sessionId,
             computeEmbeddingUseCase,
             searchEmbeddingUseCase,
@@ -61,7 +60,7 @@ object MessageConstructionHelper {
         knowledgeContext: String? = null,
         retrieveKnowledge: (suspend (String) -> String)? = null,
         context: Context,
-        messageRepository: MessageRepository?,
+        getHistoryMessagesUseCase: GetHistoryMessagesUseCase?,
         sessionId: String,
         computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
         searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
@@ -90,12 +89,9 @@ object MessageConstructionHelper {
 
         // 获取历史消息（当前对话的历史聊天记录）
         // 注意：USER 和 ASSISTANT 角色的消息本身就是历史聊天记录，模型可以通过角色区分
-        // 从 Repository 获取消息，而不是从 uiState.messages
+        // 使用 UseCase 从 Domain 层获取消息
         val contextMessages = withContext(Dispatchers.IO) {
-            messageRepository?.observeMessages(sessionId)?.first()
-                ?.filter { it.role != MessageRole.SYSTEM }
-                ?.reversed()
-                ?.takeLast(10)
+            getHistoryMessagesUseCase?.invoke(sessionId, excludeSystem = true, limit = 10)
                 ?.map { entity ->
                     val parts = mutableListOf<UIMessagePart>()
                     if (entity.content.isNotEmpty()) {

@@ -56,11 +56,15 @@ import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
+import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ProcessBufferFullUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
+import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
+import com.example.star.aiwork.domain.usecase.HandleErrorUseCase
 import com.example.star.aiwork.data.repository.EmbeddingRepositoryImpl
 import com.example.star.aiwork.data.local.EmbeddingDatabaseProvider
 import com.example.star.aiwork.infra.embedding.EmbeddingService
@@ -154,6 +158,21 @@ class ConversationFragment : Fragment() {
                         null
                     }
                 }
+                val saveMessageUseCase = remember(messageRepository, sessionRepository) {
+                    if (messageRepository != null && sessionRepository != null) {
+                        SaveMessageUseCase(messageRepository, sessionRepository)
+                    } else {
+                        null
+                    }
+                }
+                val getHistoryMessagesUseCase = remember(messageRepository) {
+                    if (messageRepository != null) {
+                        GetHistoryMessagesUseCase(messageRepository)
+                    } else {
+                        null
+                    }
+                }
+                val shouldSaveAsMemoryUseCase = remember { ShouldSaveAsMemoryUseCase() }
 
                 // 创建 Embedding 相关的 UseCase
                 val embeddingService = remember(context) { EmbeddingService(context) }
@@ -179,6 +198,13 @@ class ConversationFragment : Fragment() {
                 val processBufferFullUseCase = remember(filterMemoryMessagesUseCase, saveEmbeddingUseCase) {
                     if (filterMemoryMessagesUseCase != null && saveEmbeddingUseCase != null) {
                         ProcessBufferFullUseCase(filterMemoryMessagesUseCase, saveEmbeddingUseCase)
+                    } else {
+                        null
+                    }
+                }
+                val handleErrorUseCase = remember(messageRepository, updateMessageUseCase) {
+                    if (messageRepository != null && updateMessageUseCase != null) {
+                        HandleErrorUseCase(messageRepository, updateMessageUseCase)
                     } else {
                         null
                     }
@@ -220,7 +246,8 @@ class ConversationFragment : Fragment() {
                     activeModelId,
                     messageRepository,
                     sessionRepository,
-                    updateMessageUseCase
+                    updateMessageUseCase,
+                    handleErrorUseCase
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -233,6 +260,9 @@ class ConversationFragment : Fragment() {
                         imageGenerationUseCase = imageGenerationUseCase,
                         generateChatNameUseCase = generateChatNameUseCase,
                         updateMessageUseCase = updateMessageUseCase,
+                        saveMessageUseCase = saveMessageUseCase,
+                        getHistoryMessagesUseCase = getHistoryMessagesUseCase,
+                        shouldSaveAsMemoryUseCase = shouldSaveAsMemoryUseCase,
                         sessionId = currentSession?.id ?: UUID.randomUUID().toString(),
                         getProviderSettings = { providerSettings },
                         messageRepository = messageRepository,
@@ -270,7 +300,8 @@ class ConversationFragment : Fragment() {
                         getModel = {
                             val provider = providerSettings.find { it.id == activeProviderId } ?: providerSettings.firstOrNull()
                             provider?.models?.find { it.modelId == activeModelId } ?: provider?.models?.firstOrNull()
-                        }
+                        },
+                        handleErrorUseCase = handleErrorUseCase
                     )
                 }
 

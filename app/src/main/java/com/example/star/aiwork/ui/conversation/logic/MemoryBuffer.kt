@@ -46,34 +46,22 @@ class MemoryBuffer(
      * 如果 buffer 满了，会触发 onBufferFull 回调
      */
     suspend fun add(item: BufferedMemoryItem) {
-        val textPreview = item.text.take(100)
-        val embeddingSize = item.embedding.size
-        
         val itemsToProcess = mutex.withLock {
             buffer.add(item)
             val currentSize = buffer.size
-            Log.d("MemoryBuffer", "📥 [添加消息] 当前 buffer 大小: $currentSize/$maxSize")
-            Log.d("MemoryBuffer", "   └─ 消息预览: $textPreview${if (item.text.length > 100) "..." else ""}")
-            Log.d("MemoryBuffer", "   └─ Embedding 维度: $embeddingSize")
             
             if (currentSize >= maxSize) {
-                Log.d("MemoryBuffer", "✅ [Buffer 已满] 触发批量处理，准备处理 $currentSize 条消息")
+                Log.d("MemoryBuffer", "Buffer full, processing ${buffer.size} items")
                 val items = buffer.toList()
-                // 记录所有待处理的消息
-                items.forEachIndexed { index, bufferedItem ->
-                    Log.d("MemoryBuffer", "   [$index] ${bufferedItem.text.take(80)}${if (bufferedItem.text.length > 80) "..." else ""}")
-                }
                 buffer.clear()
                 items
             } else {
-                Log.d("MemoryBuffer", "   └─ 还需 ${maxSize - currentSize} 条消息才能触发批量处理")
                 null
             }
         }
         
         // 在锁外执行回调，避免阻塞
         itemsToProcess?.let {
-            Log.d("MemoryBuffer", "🚀 [触发回调] 开始批量处理 ${it.size} 条消息")
             onBufferFull(it)
         }
     }
@@ -83,9 +71,7 @@ class MemoryBuffer(
      */
     suspend fun size(): Int {
         return mutex.withLock {
-            val size = buffer.size
-            Log.d("MemoryBuffer", "📊 [查询大小] 当前 buffer 大小: $size/$maxSize")
-            size
+            buffer.size
         }
     }
 
@@ -94,9 +80,7 @@ class MemoryBuffer(
      */
     suspend fun clear() {
         mutex.withLock {
-            val clearedCount = buffer.size
             buffer.clear()
-            Log.d("MemoryBuffer", "🗑️ [清空 Buffer] 已清空 $clearedCount 条消息")
         }
     }
 
@@ -107,24 +91,16 @@ class MemoryBuffer(
     suspend fun flush() {
         val itemsToProcess = mutex.withLock {
             if (buffer.isNotEmpty()) {
-                val count = buffer.size
-                Log.d("MemoryBuffer", "🔄 [手动 Flush] 触发处理，当前 buffer 有 $count 条消息（未满 $maxSize）")
                 val items = buffer.toList()
-                // 记录所有待处理的消息
-                items.forEachIndexed { index, item ->
-                    Log.d("MemoryBuffer", "   [$index] ${item.text.take(80)}${if (item.text.length > 80) "..." else ""}")
-                }
                 buffer.clear()
                 items
             } else {
-                Log.d("MemoryBuffer", "⚠️ [手动 Flush] Buffer 为空，无需处理")
                 null
             }
         }
         
         // 在锁外执行回调，避免阻塞
         itemsToProcess?.let {
-            Log.d("MemoryBuffer", "🚀 [触发回调] 开始批量处理 ${it.size} 条消息（手动 flush）")
             onBufferFull(it)
         }
     }

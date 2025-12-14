@@ -3,6 +3,7 @@ package com.example.star.aiwork.ui.conversation.logic
 import android.util.Log
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -13,55 +14,12 @@ import kotlinx.coroutines.withContext
  * buffer 满了之后会通过 FilterMemoryMessagesUseCase 进行批量判断并保存。
  */
 class MemoryTriggerFilter(
+    private val shouldSaveAsMemoryUseCase: ShouldSaveAsMemoryUseCase,
     private val computeEmbeddingUseCase: ComputeEmbeddingUseCase?,
     private val saveEmbeddingUseCase: SaveEmbeddingUseCase?,
     private val memoryBuffer: MemoryBuffer?
 ) {
     
-    companion object {
-        /**
-         * 显式触发词列表
-         */
-        private val EXPLICIT_TRIGGERS = listOf(
-            "记住", "帮我记", "加入记忆", "牢记",
-            "以后你都", "永远记", "保存到记忆"
-        )
-
-        /**
-         * 身份模式（正则表达式）
-         */
-        private val IDENTITY_PATTERNS = listOf(
-            Regex("我叫(.+?)"),
-            Regex("我是(.+?)"),
-            Regex("我住在(.+?)"),
-            Regex("我来自(.+?)"),
-            Regex("我的职业是(.+?)")
-        )
-
-        /**
-         * 偏好模式（正则表达式）
-         */
-        private val PREFERENCE_PATTERNS = listOf(
-            Regex("我喜欢(.+?)"),
-            Regex("i like(.+?)"),
-            Regex("我更喜欢(.+?)"),
-            Regex("我希望你(.+?)"),
-            Regex("以后请你(.+?)"),
-            Regex("你以后回答我(.+?)")
-        )
-
-        /**
-         * 长期目标模式（正则表达式）
-         */
-        private val LONG_TERM_GOALS = listOf(
-            Regex("我想在未来(.+?)"),
-            Regex("我接下来(.+?)"),
-            Regex("我计划(.+?)"),
-            Regex("我打算(.+?)"),
-            Regex("我的目标是(.+?)")
-        )
-    }
-
     /**
      * 检查输入文本是否匹配任何记忆触发模式
      * 
@@ -69,49 +27,15 @@ class MemoryTriggerFilter(
      * @return 如果匹配则返回 true，否则返回 false
      */
     fun shouldSaveAsMemory(text: String): Boolean {
-        if (text.isBlank()) {
-            Log.d("MemoryTriggerFilter", "🔍 [过滤检查] 文本为空，跳过")
-            return false
+        val result = shouldSaveAsMemoryUseCase(text)
+        if (result) {
+            val textPreview = text.trim().take(100)
+            Log.d("MemoryTriggerFilter", "✅ [过滤检查] 匹配记忆触发模式")
+            Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (text.length > 100) "..." else ""}")
+        } else {
+            Log.d("MemoryTriggerFilter", "❌ [过滤检查] 未匹配任何模式")
         }
-        
-        val trimmedText = text.trim()
-        val textPreview = trimmedText.take(100)
-        
-        // 检查显式触发词
-        val explicitMatch = EXPLICIT_TRIGGERS.firstOrNull { trigger -> trimmedText.contains(trigger) }
-        if (explicitMatch != null) {
-            Log.d("MemoryTriggerFilter", "✅ [过滤检查] 匹配显式触发词: \"$explicitMatch\"")
-            Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (trimmedText.length > 100) "..." else ""}")
-            return true
-        }
-        
-        // 检查身份模式
-        val identityMatch = IDENTITY_PATTERNS.firstOrNull { pattern -> pattern.containsMatchIn(trimmedText) }
-        if (identityMatch != null) {
-            Log.d("MemoryTriggerFilter", "✅ [过滤检查] 匹配身份模式: ${identityMatch.pattern}")
-            Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (trimmedText.length > 100) "..." else ""}")
-            return true
-        }
-        
-        // 检查偏好模式
-        val preferenceMatch = PREFERENCE_PATTERNS.firstOrNull { pattern -> pattern.containsMatchIn(trimmedText) }
-        if (preferenceMatch != null) {
-            Log.d("MemoryTriggerFilter", "✅ [过滤检查] 匹配偏好模式: ${preferenceMatch.pattern}")
-            Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (trimmedText.length > 100) "..." else ""}")
-            return true
-        }
-        
-        // 检查长期目标模式
-        val goalMatch = LONG_TERM_GOALS.firstOrNull { pattern -> pattern.containsMatchIn(trimmedText) }
-        if (goalMatch != null) {
-            Log.d("MemoryTriggerFilter", "✅ [过滤检查] 匹配长期目标模式: ${goalMatch.pattern}")
-            Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (trimmedText.length > 100) "..." else ""}")
-            return true
-        }
-        
-        Log.d("MemoryTriggerFilter", "❌ [过滤检查] 未匹配任何模式")
-        Log.d("MemoryTriggerFilter", "   └─ 文本: $textPreview${if (trimmedText.length > 100) "..." else ""}")
-        return false
+        return result
     }
 
     /**
