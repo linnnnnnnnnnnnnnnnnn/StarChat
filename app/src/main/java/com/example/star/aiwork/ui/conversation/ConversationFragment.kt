@@ -58,6 +58,7 @@ import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ProcessBufferFullUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.data.repository.EmbeddingRepositoryImpl
@@ -175,6 +176,13 @@ class ConversationFragment : Fragment() {
                 val filterMemoryMessagesUseCase = remember(aiRepository) {
                     FilterMemoryMessagesUseCase(aiRepository)
                 }
+                val processBufferFullUseCase = remember(filterMemoryMessagesUseCase, saveEmbeddingUseCase) {
+                    if (filterMemoryMessagesUseCase != null && saveEmbeddingUseCase != null) {
+                        ProcessBufferFullUseCase(filterMemoryMessagesUseCase, saveEmbeddingUseCase)
+                    } else {
+                        null
+                    }
+                }
 
                 // Create ObserveMessagesUseCase
                 val observeMessagesUseCase = remember(messageRepository) {
@@ -207,6 +215,7 @@ class ConversationFragment : Fragment() {
                     searchEmbeddingUseCase,
                     saveEmbeddingUseCase,
                     filterMemoryMessagesUseCase,
+                    processBufferFullUseCase,
                     activeProviderId,
                     activeModelId,
                     messageRepository,
@@ -253,6 +262,7 @@ class ConversationFragment : Fragment() {
                         searchEmbeddingUseCase = searchEmbeddingUseCase,
                         saveEmbeddingUseCase = saveEmbeddingUseCase,
                         filterMemoryMessagesUseCase = filterMemoryMessagesUseCase,
+                        processBufferFullUseCase = processBufferFullUseCase,
                         embeddingTopK = 3,
                         getProviderSetting = {
                             providerSettings.find { it.id == activeProviderId } ?: providerSettings.firstOrNull()

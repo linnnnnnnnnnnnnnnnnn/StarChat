@@ -475,7 +475,9 @@ fun ConversationPreview() {
             isNewChat = { false },
             computeEmbeddingUseCase = null,
             searchEmbeddingUseCase = null,
-            saveEmbeddingUseCase = null
+            saveEmbeddingUseCase = null,
+            filterMemoryMessagesUseCase = null,
+            processBufferFullUseCase = null
         )
 
         ConversationContent(

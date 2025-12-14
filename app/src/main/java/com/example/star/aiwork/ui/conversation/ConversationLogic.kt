@@ -17,6 +17,7 @@ import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.domain.repository.SessionRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
+import com.example.star.aiwork.domain.usecase.embedding.ProcessBufferFullUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.domain.repository.MessageRepository
@@ -79,6 +80,7 @@ class ConversationLogic(
     private val searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
     private val saveEmbeddingUseCase: SaveEmbeddingUseCase? = null,
     private val filterMemoryMessagesUseCase: FilterMemoryMessagesUseCase? = null,
+    private val processBufferFullUseCase: ProcessBufferFullUseCase? = null,
     private val embeddingTopK: Int = 3,
     private val getProviderSetting: () -> ProviderSetting? = { null },
     private val getModel: () -> Model? = { null }
@@ -131,7 +133,7 @@ class ConversationLogic(
     )
 
     // 创建 MemoryBuffer，当 buffer 满了时触发批量处理
-    private val memoryBuffer = if (filterMemoryMessagesUseCase != null && saveEmbeddingUseCase != null) {
+    private val memoryBuffer = if (processBufferFullUseCase != null) {
         MemoryBuffer(maxSize = 5) { items ->
             handleBufferFull(items)
         }
@@ -147,103 +149,26 @@ class ConversationLogic(
 
     /**
      * 处理 buffer 满了的情况
-     * 调用 FilterMemoryMessagesUseCase 判断哪些消息需要保存，然后保存它们
+     * 委托给 ProcessBufferFullUseCase 处理
      */
     private suspend fun handleBufferFull(items: List<BufferedMemoryItem>) {
-        Log.d("ConversationLogic", "=".repeat(80))
-        Log.d("ConversationLogic", "🔄 [批量处理] Buffer 已满，开始批量处理")
-        
-        if (items.isEmpty()) {
-            Log.w("ConversationLogic", "⚠️ [批量处理] 消息列表为空，跳过处理")
-            return
-        }
-
-        Log.d("ConversationLogic", "   └─ 待处理消息数量: ${items.size}")
-        items.forEachIndexed { index, item ->
-            Log.d("ConversationLogic", "   [$index] ${item.text.take(60)}${if (item.text.length > 60) "..." else ""} (embedding: ${item.embedding.size}维)")
-        }
-
         val providerSetting = getProviderSetting()
         val model = getModel()
         
-        if (filterMemoryMessagesUseCase == null || providerSetting == null || model == null) {
-            Log.w("ConversationLogic", "⚠️ [批量处理] 依赖项缺失，跳过处理")
-            Log.w("ConversationLogic", "   └─ FilterMemoryMessagesUseCase: ${filterMemoryMessagesUseCase != null}")
-            Log.w("ConversationLogic", "   └─ ProviderSetting: ${providerSetting != null}")
-            Log.w("ConversationLogic", "   └─ Model: ${model != null}")
+        if (processBufferFullUseCase == null || providerSetting == null || model == null) {
             return
         }
 
-        Log.d("ConversationLogic", "   └─ Provider: ${providerSetting.name}, Model: ${model.modelId}")
-
-        try {
-            // 提取文本列表
-            val texts = items.map { it.text }
-            Log.d("ConversationLogic", "📤 [批量处理] 调用 FilterMemoryMessagesUseCase 进行 AI 判断")
-            Log.d("ConversationLogic", "   └─ 发送 ${texts.size} 条消息文本给 AI 模型")
-            
-            // 调用 FilterMemoryMessagesUseCase 判断哪些需要保存
-            val indicesToSave = filterMemoryMessagesUseCase(
-                messages = texts,
-                providerSetting = providerSetting,
-                model = model
+        // 转换 UI 层的 BufferedMemoryItem 到 domain 层的类型
+        val domainItems = items.map { item ->
+            ProcessBufferFullUseCase.BufferedMemoryItem(
+                text = item.text,
+                embedding = item.embedding
             )
-            
-            Log.d("ConversationLogic", "📥 [批量处理] AI 模型返回结果")
-            Log.d("ConversationLogic", "   └─ 需要保存的消息索引: $indicesToSave")
-            Log.d("ConversationLogic", "   └─ 需要保存的消息数量: ${indicesToSave.size}/${items.size}")
-            
-            if (indicesToSave.isEmpty()) {
-                Log.d("ConversationLogic", "⏭️ [批量处理] AI 模型判断没有消息需要写入长期记忆")
-                Log.d("ConversationLogic", "=".repeat(80))
-                return
-            }
-            
-            // 记录被选中的消息详情
-            indicesToSave.forEach { index ->
-                if (index >= 0 && index < items.size) {
-                    val item = items[index]
-                    Log.d("ConversationLogic", "   ✅ 索引 $index 被选中: ${item.text.take(60)}${if (item.text.length > 60) "..." else ""}")
-                } else {
-                    Log.w("ConversationLogic", "   ⚠️ 无效索引: $index (总数: ${items.size})")
-                }
-            }
-            
-            // 在后台线程执行保存操作
-            Log.d("ConversationLogic", "💾 [批量处理] 开始保存被选中的消息到数据库")
-            withContext(Dispatchers.IO) {
-                var successCount = 0
-                var failCount = 0
-                
-                indicesToSave.forEach { index ->
-                    if (index >= 0 && index < items.size) {
-                        try {
-                            val item = items[index]
-                            Log.d("ConversationLogic", "   💾 正在保存索引 $index...")
-                            memoryTriggerFilter.saveMemoryWithEmbedding(item.text, item.embedding)
-                            successCount++
-                            Log.d("ConversationLogic", "   ✅ 索引 $index 保存成功")
-                        } catch (e: Exception) {
-                            failCount++
-                            Log.e("ConversationLogic", "   ❌ 索引 $index 保存失败: ${e.message}", e)
-                        }
-                    }
-                }
-                
-                Log.d("ConversationLogic", "📊 [批量处理] 保存统计")
-                Log.d("ConversationLogic", "   └─ 成功: $successCount, 失败: $failCount, 总计: ${indicesToSave.size}")
-            }
-            
-            Log.d("ConversationLogic", "✅ [批量处理] 批量处理完成")
-            Log.d("ConversationLogic", "=".repeat(80))
-            
-        } catch (e: Exception) {
-            Log.e("ConversationLogic", "❌ [批量处理] 批量处理失败: ${e.message}", e)
-            Log.e("ConversationLogic", "   └─ 异常类型: ${e.javaClass.simpleName}")
-            e.printStackTrace()
-            Log.d("ConversationLogic", "=".repeat(80))
-            // 发生错误时静默处理，不影响正常流程
         }
+        
+        // 委托给 use case 处理
+        processBufferFullUseCase(domainItems, providerSetting, model)
     }
 
     /**
