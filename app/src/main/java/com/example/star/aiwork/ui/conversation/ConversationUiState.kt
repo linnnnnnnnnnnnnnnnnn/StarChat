@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.star.aiwork.R
-import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
@@ -70,9 +69,6 @@ class ConversationUiState(
     var isFallbackEnabled: Boolean by mutableStateOf(true)
     var fallbackProviderId: String? by mutableStateOf(null)
     var fallbackModelId: String? by mutableStateOf(null)
-
-    // 当前激活的 Agent
-    var activeAgent: Agent? by mutableStateOf(null)
 
     // ====== 语音输入模式状态 ======
     var isVoiceMode: Boolean by mutableStateOf(false) // 是否处于语音输入模式（替换文本输入框为"按住说话"按钮）

@@ -75,7 +75,6 @@ import androidx.compose.ui.unit.dp
 import com.example.star.aiwork.R
 import com.example.star.aiwork.data.colleagueProfile
 import com.example.star.aiwork.data.meProfile
-import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.SessionEntity
 import com.example.star.aiwork.ui.theme.JetchatTheme
 
@@ -92,8 +91,6 @@ fun JetchatDrawer(
     drawerState: DrawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
     onChatClicked: (String) -> Unit,
     onProfileClicked: (String) -> Unit,
-    onAgentClicked: (Agent) -> Unit = { },
-    onAgentDelete: (Agent) -> Unit = { },
     onPromptMarketClicked: () -> Unit = { },
     onNewChatClicked: () -> Unit = { },
     onRenameSession: (String) -> Unit = { },
@@ -102,7 +99,6 @@ fun JetchatDrawer(
     onDeleteSession: (String) -> Unit = { },
     onDeleteAllSessions: () -> Unit = { },
     onRealtimeChatClicked: () -> Unit = { },
-    agents: List<Agent> = emptyList(),
     sessions: List<SessionEntity> = emptyList(),
     selectedMenu: String = "",
     content: @Composable () -> Unit,
@@ -115,8 +111,6 @@ fun JetchatDrawer(
                     JetchatDrawerContent(
                         onProfileClicked = onProfileClicked,
                         onChatClicked = onChatClicked,
-                        onAgentClicked = onAgentClicked,
-                        onAgentDelete = onAgentDelete,
                         onPromptMarketClicked = onPromptMarketClicked,
                         onNewChatClicked = onNewChatClicked,
                         onRenameSession = onRenameSession,
@@ -125,7 +119,6 @@ fun JetchatDrawer(
                         onDeleteSession = onDeleteSession,
                         onDeleteAllSessions = onDeleteAllSessions,
                         onRealtimeChatClicked = onRealtimeChatClicked,
-                        agents = agents,
                         sessions = sessions,
                         selectedMenu = selectedMenu
                     )
@@ -142,7 +135,7 @@ fun JetchatDrawer(
  * 包含：
  * - 头部 Logo
  * - New Chat 按钮
- * - 角色市场 (Agent Market)
+ * - 角色市场
  * - 设置选项
  * - 聊天列表 (Chats)
  *
@@ -155,8 +148,6 @@ fun JetchatDrawer(
 fun JetchatDrawerContent(
     onProfileClicked: (String) -> Unit,
     onChatClicked: (String) -> Unit,
-    onAgentClicked: (Agent) -> Unit,
-    onAgentDelete: (Agent) -> Unit,
     onPromptMarketClicked: () -> Unit,
     onNewChatClicked: () -> Unit,
     onRenameSession: (String) -> Unit,
@@ -165,7 +156,6 @@ fun JetchatDrawerContent(
     onDeleteSession: (String) -> Unit,
     onDeleteAllSessions: () -> Unit,
     onRealtimeChatClicked: () -> Unit,
-    agents: List<Agent>,
     sessions: List<SessionEntity>,
     selectedMenu: String
 ) {
@@ -173,7 +163,6 @@ fun JetchatDrawerContent(
     // 以避开状态栏 (Status Bar) 区域
     // 使用 verticalScroll 使内容可滚动，确保所有会话都能访问
     val scrollState = rememberScrollState()
-    var isAgentsExpanded by remember { mutableStateOf(false) }
     var showArchivedSessions by remember { mutableStateOf(false) }
 
     Column(
@@ -190,22 +179,6 @@ fun JetchatDrawerContent(
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("角色市场")
         MarketItem(onPromptMarketClicked)
-
-        if (agents.isNotEmpty()) {
-            CollapsibleDrawerItemHeader("我的智能体", isAgentsExpanded) {
-                isAgentsExpanded = !isAgentsExpanded
-            }
-            if (isAgentsExpanded) {
-                agents.forEach { agent ->
-                    AgentItem(
-                        agent = agent,
-                        selected = false, // Can be updated to track selection
-                        onAgentClicked = { onAgentClicked(agent) },
-                        onAgentDelete = { onAgentDelete(agent) }
-                    )
-                }
-            }
-        }
 
         DividerItem(modifier = Modifier.padding(horizontal = 30.dp))
         DrawerItemHeader("设置")
@@ -578,77 +551,6 @@ private fun ChatItem(
 }
 
 /**
- * Agent 列表项组件。
- */
-@Composable
-private fun AgentItem(
-    agent: Agent,
-    selected: Boolean,
-    onAgentClicked: () -> Unit,
-    onAgentDelete: () -> Unit
-) {
-    val background = if (selected) {
-        Modifier.background(MaterialTheme.colorScheme.primaryContainer)
-    } else {
-        Modifier
-    }
-    Row(
-        modifier = Modifier
-            .height(56.dp)
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(CircleShape)
-            .then(background)
-            .clickable(onClick = onAgentClicked),
-        verticalAlignment = CenterVertically,
-    ) {
-        val iconTint = if (selected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        }
-        Icon(
-            imageVector = Icons.Default.Person, // Using a default person icon for Agents
-            tint = iconTint,
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp),
-            contentDescription = null,
-        )
-        Column(
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .weight(1f)
-        ) {
-            Text(
-                text = agent.name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-            Text(
-                text = agent.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
-
-        if (!agent.isDefault) {
-            IconButton(onClick = onAgentDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    contentDescription = "Delete Agent"
-                )
-            }
-        }
-    }
-}
-
-
-/**
  * 设置列表项组件。
  *
  * @param text 文本。
@@ -716,8 +618,6 @@ fun DrawerPreview() {
                 JetchatDrawerContent(
                     onProfileClicked = {},
                     onChatClicked = {},
-                    onAgentClicked = {},
-                    onAgentDelete = {},
                     onPromptMarketClicked = {},
                     onNewChatClicked = {},
                     onRenameSession = {},
@@ -726,7 +626,6 @@ fun DrawerPreview() {
                     onDeleteSession = {},
                     onDeleteAllSessions = {},
                     onRealtimeChatClicked = {},
-                    agents = emptyList(),
                     sessions = emptyList(),
                     selectedMenu = ""
                 )
@@ -747,8 +646,6 @@ fun DrawerPreviewDark() {
                 JetchatDrawerContent(
                     onProfileClicked = {},
                     onChatClicked = {},
-                    onAgentClicked = {},
-                    onAgentDelete = {},
                     onPromptMarketClicked = {},
                     onNewChatClicked = {},
                     onRenameSession = {},
@@ -757,7 +654,6 @@ fun DrawerPreviewDark() {
                     onDeleteSession = {},
                     onDeleteAllSessions = {},
                     onRealtimeChatClicked = {},
-                    agents = emptyList(),
                     sessions = emptyList(),
                     selectedMenu = ""
                 )

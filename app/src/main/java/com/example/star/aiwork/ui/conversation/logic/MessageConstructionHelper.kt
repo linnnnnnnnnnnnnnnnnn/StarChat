@@ -2,7 +2,6 @@ package com.example.star.aiwork.ui.conversation.logic
 
 import android.content.Context
 import android.util.Log
-import com.example.star.aiwork.domain.model.Agent
 import com.example.star.aiwork.domain.model.ChatDataItem
 import com.example.star.aiwork.domain.model.MessageRole
 import com.example.star.aiwork.domain.repository.MessageRepository
@@ -30,7 +29,6 @@ object MessageConstructionHelper {
         authorMe: String,
         inputContent: String,
         isAutoTriggered: Boolean,
-        activeAgent: Agent?,
         retrieveKnowledge: suspend (String) -> String,
         context: Context,
         messageRepository: MessageRepository?,
@@ -44,7 +42,6 @@ object MessageConstructionHelper {
             authorMe,
             inputContent,
             isAutoTriggered,
-            activeAgent,
             null,
             retrieveKnowledge,
             context,
@@ -61,7 +58,6 @@ object MessageConstructionHelper {
         authorMe: String,
         inputContent: String,
         isAutoTriggered: Boolean,
-        activeAgent: Agent?,
         knowledgeContext: String? = null,
         retrieveKnowledge: (suspend (String) -> String)? = null,
         context: Context,
@@ -90,11 +86,7 @@ object MessageConstructionHelper {
             inputContent
         }
 
-        val finalUserContent = if (activeAgent != null && !isAutoTriggered) {
-            activeAgent.messageTemplate.replace("{{ message }}", augmentedInput)
-        } else {
-            augmentedInput
-        }
+        val finalUserContent = augmentedInput
 
         // 获取历史消息（当前对话的历史聊天记录）
         // 注意：USER 和 ASSISTANT 角色的消息本身就是历史聊天记录，模型可以通过角色区分
@@ -171,14 +163,6 @@ object MessageConstructionHelper {
         }
 
         val messagesToSend = mutableListOf<UIMessage>()
-
-        activeAgent?.systemPrompt?.takeIf { it.isNotEmpty() }?.let {
-            messagesToSend.add(UIMessage(role = MessageRole.SYSTEM, parts = listOf(UIMessagePart.Text(it))))
-        }
-
-        activeAgent?.presetMessages?.forEach { preset ->
-            messagesToSend.add(UIMessage(role = preset.role, parts = listOf(UIMessagePart.Text(preset.content))))
-        }
 
         Log.d("MessageConstruction", "准备添加 contextMessages 到 messagesToSend，contextMessages 数量: ${contextMessages.size}")
         // 检查 contextMessages 中是否包含长期记忆

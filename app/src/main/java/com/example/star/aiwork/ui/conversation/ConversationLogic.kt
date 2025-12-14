@@ -498,7 +498,6 @@ class ConversationLogic(
                     authorMe = authorMe,
                     inputContent = inputContent,
                     isAutoTriggered = isAutoTriggered,
-                    activeAgent = uiState.activeAgent,
                     retrieveKnowledge = retrieveKnowledge,
                     context = context,
                     messageRepository = messageRepository,
