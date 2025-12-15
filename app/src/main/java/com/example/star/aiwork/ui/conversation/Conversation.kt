@@ -50,7 +50,6 @@ import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
 import com.example.star.aiwork.domain.model.SessionEntity
-import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
@@ -457,7 +456,6 @@ fun ConversationPreview() {
         val sendMessageUseCase = SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope)
         val pauseStreamingUseCase = PauseStreamingUseCase(aiRepository)
         val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, messageRepository)
-        val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
         val updateMessageUseCase = UpdateMessageUseCase(messageRepository, sessionRepository)
 
         val saveMessageUseCase = SaveMessageUseCase(messageRepository, sessionRepository)

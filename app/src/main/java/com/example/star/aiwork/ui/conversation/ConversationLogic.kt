@@ -9,7 +9,6 @@ import com.example.star.aiwork.domain.model.Model
 import com.example.star.aiwork.domain.model.ModelType
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
-import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
@@ -34,7 +33,6 @@ import com.example.star.aiwork.ui.conversation.logic.MemoryBuffer
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
-import com.example.star.aiwork.ui.conversation.logic.ImageGenerationHandler
 import com.example.star.aiwork.ui.conversation.logic.MemoryTriggerFilter
 import com.example.star.aiwork.ui.conversation.logic.MessageConstructionHelper
 import com.example.star.aiwork.ui.conversation.logic.RollbackHandler
@@ -68,7 +66,6 @@ class ConversationLogic(
     private val sendMessageUseCase: SendMessageUseCase,
     private val pauseStreamingUseCase: PauseStreamingUseCase,
     private val rollbackMessageUseCase: RollbackMessageUseCase,
-    private val imageGenerationUseCase: ImageGenerationUseCase,
     private val generateChatNameUseCase: GenerateChatNameUseCase? = null,
     private val updateMessageUseCase: UpdateMessageUseCase? = null,
     private val saveMessageUseCase: SaveMessageUseCase? = null,
@@ -88,8 +85,7 @@ class ConversationLogic(
     private val processBufferFullUseCase: ProcessBufferFullUseCase? = null,
     private val getProviderSetting: () -> ProviderSetting? = { null },
     private val getModel: () -> Model? = { null },
-    private val handleErrorUseCase: HandleErrorUseCase? = null,
-    private val constructMessagesUseCase: ConstructMessagesUseCase
+    private val handleErrorUseCase: HandleErrorUseCase? = null
 ) {
 
     // 用于保存流式收集协程的 Job，以便可以立即取消
@@ -106,16 +102,6 @@ class ConversationLogic(
 
 
     // Handlers
-    private val imageGenerationHandler = ImageGenerationHandler(
-        uiState = uiState,
-        imageGenerationUseCase = imageGenerationUseCase,
-        saveMessageUseCase = saveMessageUseCase ?: throw IllegalStateException("SaveMessageUseCase is required"),
-        updateMessageUseCase = updateMessageUseCase ?: throw IllegalStateException("UpdateMessageUseCase is required"),
-        sessionId = sessionId,
-        timeNow = timeNow,
-        onSessionUpdated = onSessionUpdated
-    )
-
     private val streamingResponseHandler = StreamingResponseHandler(
         uiState = uiState,
         messageRepository = messageRepository,
@@ -370,32 +356,28 @@ class ConversationLogic(
             uiState.selectedImageUri = null
         }
 
-        // 3. Call LLM or Image Generation
+        // 3. Call LLM
         if (providerSetting != null && model != null) {
             try {
-                
-                if (model.type == ModelType.IMAGE) {
-                    imageGenerationHandler.generateImage(providerSetting, model, inputContent)
-                    return
-                }
-
-                // Construct Messages via domain use case（下沉到 domain 层）
-                val constructionResult = constructMessagesUseCase(
-                    sessionId = sessionId,
-                    inputContent = inputContent,
-                    isAutoTriggered = isAutoTriggered,
-                    retrieveKnowledge = retrieveKnowledge
-                )
-
-                val historyChat: List<ChatDataItem> = constructionResult.history
-                val userMessage: ChatDataItem = constructionResult.userMessage
-                val computedEmbedding = constructionResult.computedEmbedding
-
                 val params = TextGenerationParams(
                     model = model,
                     temperature = uiState.temperature,
                     maxTokens = uiState.maxTokens
                 )
+
+                // 通过 SendMessageUseCase 内部调用 ConstructMessagesUseCase，让 Domain 自己决定上下文
+                val sendResult = sendMessageUseCase.invokeWithConstruction(
+                    sessionId = sessionId,
+                    inputContent = inputContent,
+                    isAutoTriggered = isAutoTriggered,
+                    retrieveKnowledge = retrieveKnowledge,
+                    providerSetting = providerSetting,
+                    params = params
+                )
+
+                val historyChat: List<ChatDataItem> = sendResult.history
+                val userMessage: ChatDataItem = sendResult.userMessage
+                val computedEmbedding = sendResult.computedEmbedding
 
                 // 使用 ChatDataItem 构造日志所需的 UIMessage（仅用于日志打印）
                 val messagesToSendForLog = (historyChat + userMessage).map {
@@ -422,14 +404,6 @@ class ConversationLogic(
                     userMessage = userMessage,
                     isAutoTriggered = isAutoTriggered,
                     loopCount = loopCount
-                )
-
-                val sendResult = sendMessageUseCase(
-                    sessionId = sessionId,
-                    userMessage = userMessage,
-                    history = historyChat,
-                    providerSetting = providerSetting,
-                    params = params
                 )
 
                 // 使用 SendMessageUseCase 返回的 ASSISTANT 消息ID

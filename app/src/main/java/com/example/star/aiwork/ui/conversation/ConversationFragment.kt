@@ -51,7 +51,6 @@ import com.example.star.aiwork.data.repository.MessageRepositoryImpl
 import com.example.star.aiwork.data.repository.SessionRepositoryImpl
 import com.example.star.aiwork.infra.cache.SessionCacheDataSourceImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
-import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
@@ -136,17 +135,12 @@ class ConversationFragment : Fragment() {
                     SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
                 }
                 
-                val sendMessageUseCase = remember(aiRepository, messageRepository, sessionRepository, scope) {
-                    SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope)
-                }
+                // sendMessageUseCase 在下方使用 constructMessagesUseCase 一并创建
                 val pauseStreamingUseCase = remember(aiRepository) {
                     PauseStreamingUseCase(aiRepository)
                 }
                 val rollbackMessageUseCase = remember(aiRepository, messageRepository) {
                     RollbackMessageUseCase(aiRepository, messageRepository)
-                }
-                val imageGenerationUseCase = remember(aiRepository) {
-                    ImageGenerationUseCase(aiRepository)
                 }
                 val generateChatNameUseCase = remember(aiRepository) {
                     GenerateChatNameUseCase(aiRepository)
@@ -203,11 +197,18 @@ class ConversationFragment : Fragment() {
                     }
                 }
                 val constructMessagesUseCase = remember(messageRepository, computeEmbeddingUseCase, searchEmbeddingUseCase) {
-                    if (messageRepository != null) {
+                    if (messageRepository != null && computeEmbeddingUseCase != null && searchEmbeddingUseCase != null) {
                         ConstructMessagesUseCase(
                             messageRepository = messageRepository,
                             computeEmbeddingUseCase = computeEmbeddingUseCase,
                             searchEmbeddingUseCase = searchEmbeddingUseCase
+                        )
+                    } else if (messageRepository != null) {
+                        // 仅在需要时使用 embedding 能力，缺失时只使用历史上下文
+                        ConstructMessagesUseCase(
+                            messageRepository = messageRepository,
+                            computeEmbeddingUseCase = null,
+                            searchEmbeddingUseCase = null
                         )
                     } else {
                         // 在没有 repository 的情况下不会被调用，这里返回一个占位实现以避免 NPE
@@ -216,10 +217,14 @@ class ConversationFragment : Fragment() {
                                 messageCacheDataSource,
                                 messageLocalDataSource
                             ),
-                            computeEmbeddingUseCase = computeEmbeddingUseCase,
-                            searchEmbeddingUseCase = searchEmbeddingUseCase
+                            computeEmbeddingUseCase = null,
+                            searchEmbeddingUseCase = null
                         )
                     }
+                }
+
+                val sendMessageUseCase = remember(aiRepository, messageRepository, sessionRepository, scope, constructMessagesUseCase) {
+                    SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope, constructMessagesUseCase)
                 }
 
                 // Create ObserveMessagesUseCase
@@ -258,8 +263,7 @@ class ConversationFragment : Fragment() {
                     messageRepository,
                     sessionRepository,
                     updateMessageUseCase,
-                    handleErrorUseCase,
-                    constructMessagesUseCase
+                    handleErrorUseCase
                 ) {
                     ConversationLogic(
                         uiState = uiState,
@@ -269,7 +273,6 @@ class ConversationFragment : Fragment() {
                         sendMessageUseCase = sendMessageUseCase,
                         pauseStreamingUseCase = pauseStreamingUseCase,
                         rollbackMessageUseCase = rollbackMessageUseCase,
-                        imageGenerationUseCase = imageGenerationUseCase,
                         generateChatNameUseCase = generateChatNameUseCase,
                         updateMessageUseCase = updateMessageUseCase,
                         saveMessageUseCase = saveMessageUseCase,
@@ -310,8 +313,7 @@ class ConversationFragment : Fragment() {
                             val provider = providerSettings.find { it.id == activeProviderId } ?: providerSettings.firstOrNull()
                             provider?.models?.find { it.modelId == activeModelId } ?: provider?.models?.firstOrNull()
                         },
-                        handleErrorUseCase = handleErrorUseCase,
-                        constructMessagesUseCase = constructMessagesUseCase
+                        handleErrorUseCase = handleErrorUseCase
                     )
                 }
 
