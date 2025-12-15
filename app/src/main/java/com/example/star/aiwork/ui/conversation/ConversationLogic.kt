@@ -17,6 +17,8 @@ import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
 import com.example.star.aiwork.domain.repository.SessionRepository
 import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
+import com.example.star.aiwork.domain.usecase.embedding.MemoryBuffer
+import com.example.star.aiwork.domain.usecase.embedding.MemoryTriggerFilter
 import com.example.star.aiwork.domain.usecase.embedding.ProcessBufferFullUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
@@ -28,8 +30,7 @@ import com.example.star.aiwork.domain.model.MessageEntity
 import com.example.star.aiwork.domain.model.MessageType
 import com.example.star.aiwork.domain.model.MessageStatus
 import com.example.star.aiwork.domain.model.MessageMetadata
-import com.example.star.aiwork.ui.conversation.logic.BufferedMemoryItem
-import com.example.star.aiwork.ui.conversation.logic.MemoryBuffer
+import com.example.star.aiwork.domain.usecase.embedding.BufferedMemoryItem
 import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getErrorMessage
 import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
