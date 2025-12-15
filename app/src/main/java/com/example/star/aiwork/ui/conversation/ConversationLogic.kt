@@ -34,7 +34,6 @@ import com.example.star.aiwork.ui.conversation.util.ConversationErrorHelper.getE
 import com.example.star.aiwork.data.model.LlmError
 import com.example.star.aiwork.ui.conversation.util.ConversationLogHelper.logAllMessagesToSend
 import com.example.star.aiwork.ui.conversation.logic.MemoryTriggerFilter
-import com.example.star.aiwork.ui.conversation.logic.MessageConstructionHelper
 import com.example.star.aiwork.ui.conversation.logic.RollbackHandler
 import com.example.star.aiwork.ui.conversation.logic.StreamingResponseHandler
 import kotlinx.coroutines.CancellationException
@@ -56,7 +55,6 @@ import java.util.UUID
  * - ImageGenerationHandler
  * - StreamingResponseHandler
  * - RollbackHandler
- * - MessageConstructionHelper (逻辑已逐步下沉到 domain 层的 ConstructMessagesUseCase)
  */
 class ConversationLogic(
     private val uiState: ConversationUiState,
