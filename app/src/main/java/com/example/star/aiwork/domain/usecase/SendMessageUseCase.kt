@@ -11,6 +11,7 @@ import com.example.star.aiwork.domain.model.MessageType
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.domain.repository.MessageRepository
 import com.example.star.aiwork.domain.repository.SessionRepository
+import com.example.star.aiwork.domain.usecase.message.ConstructMessagesUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -29,13 +30,28 @@ class SendMessageUseCase(
     private val aiRepository: AiRepository,
     private val messageRepository: MessageRepository,
     private val sessionRepository: SessionRepository,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val constructMessagesUseCase: ConstructMessagesUseCase
 ) {
 
     data class Output(
         val stream: Flow<String>,
         val taskId: String,
         val assistantMessageId: String  // 返回创建的 ASSISTANT 消息ID
+    )
+
+    /**
+     * 综合使用 ConstructMessagesUseCase 构造上下文 + 当前用户消息，并发送消息。
+     *
+     * UI 只需要提供 sessionId 和本次用户输入等原始信息，不再关心要传哪些历史消息给模型。
+     */
+    data class FullOutput(
+        val stream: Flow<String>,
+        val taskId: String,
+        val assistantMessageId: String,
+        val history: List<ChatDataItem>,
+        val userMessage: ChatDataItem,
+        val computedEmbedding: FloatArray?
     )
 
     operator fun invoke(
@@ -123,6 +139,45 @@ class SendMessageUseCase(
             stream = stream,
             taskId = taskId,
             assistantMessageId = assistantMessageId
+        )
+    }
+
+    /**
+     * 高层封装：先通过 ConstructMessagesUseCase 构造 history + userMessage，再调用原有的 send 逻辑。
+     */
+    suspend fun invokeWithConstruction(
+        sessionId: String,
+        inputContent: String,
+        isAutoTriggered: Boolean,
+        retrieveKnowledge: (suspend (String) -> String)?,
+        providerSetting: ProviderSetting,
+        params: TextGenerationParams,
+        taskId: String = UUID.randomUUID().toString()
+    ): FullOutput {
+        // 先让 Domain 自己决定要用哪些历史消息
+        val constructionResult = constructMessagesUseCase(
+            sessionId = sessionId,
+            inputContent = inputContent,
+            isAutoTriggered = isAutoTriggered,
+            retrieveKnowledge = retrieveKnowledge
+        )
+
+        val output = invoke(
+            sessionId = sessionId,
+            userMessage = constructionResult.userMessage,
+            history = constructionResult.history,
+            providerSetting = providerSetting,
+            params = params,
+            taskId = taskId
+        )
+
+        return FullOutput(
+            stream = output.stream,
+            taskId = output.taskId,
+            assistantMessageId = output.assistantMessageId,
+            history = constructionResult.history,
+            userMessage = constructionResult.userMessage,
+            computedEmbedding = constructionResult.computedEmbedding
         )
     }
 
