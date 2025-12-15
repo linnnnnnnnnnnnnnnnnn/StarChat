@@ -50,15 +50,12 @@ import com.example.star.aiwork.data.repository.AiRepositoryImpl
 import com.example.star.aiwork.domain.model.ProviderSetting
 import com.example.star.aiwork.data.local.datasource.message.MessageLocalDataSourceImpl
 import com.example.star.aiwork.domain.model.SessionEntity
-import com.example.star.aiwork.domain.usecase.ImageGenerationUseCase
 import com.example.star.aiwork.domain.usecase.PauseStreamingUseCase
 import com.example.star.aiwork.domain.usecase.RollbackMessageUseCase
 import com.example.star.aiwork.domain.usecase.SendMessageUseCase
 import com.example.star.aiwork.domain.usecase.UpdateMessageUseCase
 import com.example.star.aiwork.domain.usecase.SaveMessageUseCase
 import com.example.star.aiwork.domain.usecase.HandleErrorUseCase
-import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
-import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
 import com.example.star.aiwork.infra.network.SseClient
 import com.example.star.aiwork.infra.network.defaultOkHttpClient
 import com.example.star.aiwork.ui.theme.JetchatTheme
@@ -85,6 +82,7 @@ import androidx.compose.ui.Alignment
 import com.example.star.aiwork.data.local.datasource.message.MessageCacheDataSource
 import com.example.star.aiwork.data.repository.MessageRepositoryImpl
 import com.example.star.aiwork.domain.usecase.GenerateChatNameUseCase
+import com.example.star.aiwork.domain.usecase.message.ConstructMessagesUseCase
 import com.example.star.aiwork.infra.cache.MessageCacheDataSourceImpl
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -454,15 +452,23 @@ fun ConversationPreview() {
         val messageRepository = MessageRepositoryImpl(messageCacheDataSource, messageLocalDataSource)
         val sessionRepository = com.example.star.aiwork.data.repository.SessionRepositoryImpl(sessionCacheDataSource, sessionLocalDataSource)
 
-        val sendMessageUseCase = SendMessageUseCase(aiRepository, messageRepository, sessionRepository, scope)
+        val constructMessagesUseCase = ConstructMessagesUseCase(
+            messageRepository = messageRepository,
+            computeEmbeddingUseCase = null,
+            searchEmbeddingUseCase = null
+        )
+        val sendMessageUseCase = SendMessageUseCase(
+            aiRepository = aiRepository,
+            messageRepository = messageRepository,
+            sessionRepository = sessionRepository,
+            scope = scope,
+            constructMessagesUseCase = constructMessagesUseCase
+        )
         val pauseStreamingUseCase = PauseStreamingUseCase(aiRepository)
         val rollbackMessageUseCase = RollbackMessageUseCase(aiRepository, messageRepository)
-        val imageGenerationUseCase = ImageGenerationUseCase(aiRepository)
         val updateMessageUseCase = UpdateMessageUseCase(messageRepository, sessionRepository)
 
         val saveMessageUseCase = SaveMessageUseCase(messageRepository, sessionRepository)
-        val getHistoryMessagesUseCase = GetHistoryMessagesUseCase(messageRepository)
-        val shouldSaveAsMemoryUseCase = ShouldSaveAsMemoryUseCase()
         val handleErrorUseCase = HandleErrorUseCase(messageRepository, updateMessageUseCase)
         
         val previewLogic = ConversationLogic(
@@ -473,11 +479,8 @@ fun ConversationPreview() {
             sendMessageUseCase = sendMessageUseCase,
             pauseStreamingUseCase = pauseStreamingUseCase,
             rollbackMessageUseCase = rollbackMessageUseCase,
-            imageGenerationUseCase = imageGenerationUseCase,
             updateMessageUseCase = updateMessageUseCase,
             saveMessageUseCase = saveMessageUseCase,
-            getHistoryMessagesUseCase = getHistoryMessagesUseCase,
-            shouldSaveAsMemoryUseCase = shouldSaveAsMemoryUseCase,
             sessionId = "123",
             getProviderSettings = { emptyList() },
             messageRepository = messageRepository,
@@ -485,11 +488,14 @@ fun ConversationPreview() {
             onRenameSession = { _, _ -> },
             onPersistNewChatSession = { },
             isNewChat = { false },
+            onSessionUpdated = { _ -> },
+            taskManager = null,
             computeEmbeddingUseCase = null,
-            searchEmbeddingUseCase = null,
             saveEmbeddingUseCase = null,
             filterMemoryMessagesUseCase = null,
             processBufferFullUseCase = null,
+            getProviderSetting = { null },
+            getModel = { null },
             handleErrorUseCase = handleErrorUseCase
         )
 

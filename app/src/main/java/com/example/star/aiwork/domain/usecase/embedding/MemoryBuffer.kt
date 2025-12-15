@@ -1,14 +1,13 @@
-package com.example.star.aiwork.ui.conversation.logic
+package com.example.star.aiwork.domain.usecase.embedding
 
-import android.util.Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
  * 记忆缓冲区
- * 
+ *
  * 用于缓存通过过滤器的消息（包含文本和 embedding），
- * 当 buffer 满了（size == 5）时，触发批量处理。
+ * 当 buffer 满了（size == maxSize）时，触发批量处理。
  */
 data class BufferedMemoryItem(
     val text: String,
@@ -18,15 +17,15 @@ data class BufferedMemoryItem(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
-        
+
         other as BufferedMemoryItem
-        
+
         if (text != other.text) return false
         if (!embedding.contentEquals(other.embedding)) return false
-        
+
         return true
     }
-    
+
     override fun hashCode(): Int {
         var result = text.hashCode()
         result = 31 * result + embedding.contentHashCode()
@@ -49,9 +48,8 @@ class MemoryBuffer(
         val itemsToProcess = mutex.withLock {
             buffer.add(item)
             val currentSize = buffer.size
-            
+
             if (currentSize >= maxSize) {
-                Log.d("MemoryBuffer", "Buffer full, processing ${buffer.size} items")
                 val items = buffer.toList()
                 buffer.clear()
                 items
@@ -59,7 +57,7 @@ class MemoryBuffer(
                 null
             }
         }
-        
+
         // 在锁外执行回调，避免阻塞
         itemsToProcess?.let {
             onBufferFull(it)
@@ -98,11 +96,12 @@ class MemoryBuffer(
                 null
             }
         }
-        
+
         // 在锁外执行回调，避免阻塞
         itemsToProcess?.let {
             onBufferFull(it)
         }
     }
 }
+
 
