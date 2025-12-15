@@ -20,9 +20,8 @@ import com.example.star.aiwork.domain.usecase.embedding.ComputeEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.FilterMemoryMessagesUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ProcessBufferFullUseCase
 import com.example.star.aiwork.domain.usecase.embedding.SaveEmbeddingUseCase
-import com.example.star.aiwork.domain.usecase.embedding.SearchEmbeddingUseCase
 import com.example.star.aiwork.domain.usecase.embedding.ShouldSaveAsMemoryUseCase
-import com.example.star.aiwork.domain.usecase.message.GetHistoryMessagesUseCase
+import com.example.star.aiwork.domain.usecase.message.ConstructMessagesUseCase
 import com.example.star.aiwork.domain.usecase.HandleErrorUseCase
 import com.example.star.aiwork.domain.usecase.ErrorHandlingResult
 import com.example.star.aiwork.domain.repository.MessageRepository
@@ -59,7 +58,7 @@ import java.util.UUID
  * - ImageGenerationHandler
  * - StreamingResponseHandler
  * - RollbackHandler
- * - MessageConstructionHelper
+ * - MessageConstructionHelper (逻辑已逐步下沉到 domain 层的 ConstructMessagesUseCase)
  */
 class ConversationLogic(
     private val uiState: ConversationUiState,
@@ -73,7 +72,6 @@ class ConversationLogic(
     private val generateChatNameUseCase: GenerateChatNameUseCase? = null,
     private val updateMessageUseCase: UpdateMessageUseCase? = null,
     private val saveMessageUseCase: SaveMessageUseCase? = null,
-    private val getHistoryMessagesUseCase: GetHistoryMessagesUseCase? = null,
     private val shouldSaveAsMemoryUseCase: ShouldSaveAsMemoryUseCase? = null,
     private val sessionId: String,
     private val getProviderSettings: () -> List<ProviderSetting>,
@@ -85,14 +83,13 @@ class ConversationLogic(
     private val onSessionUpdated: suspend (sessionId: String) -> Unit = { },
     private val taskManager: StreamingTaskManager? = null,
     private val computeEmbeddingUseCase: ComputeEmbeddingUseCase? = null,
-    private val searchEmbeddingUseCase: SearchEmbeddingUseCase? = null,
     private val saveEmbeddingUseCase: SaveEmbeddingUseCase? = null,
     private val filterMemoryMessagesUseCase: FilterMemoryMessagesUseCase? = null,
     private val processBufferFullUseCase: ProcessBufferFullUseCase? = null,
-    private val embeddingTopK: Int = 3,
     private val getProviderSetting: () -> ProviderSetting? = { null },
     private val getModel: () -> Model? = { null },
-    private val handleErrorUseCase: HandleErrorUseCase? = null
+    private val handleErrorUseCase: HandleErrorUseCase? = null,
+    private val constructMessagesUseCase: ConstructMessagesUseCase
 ) {
 
     // 用于保存流式收集协程的 Job，以便可以立即取消
@@ -382,22 +379,16 @@ class ConversationLogic(
                     return
                 }
 
-                // Construct Messages (先搜索 top-k，这会计算 embedding)
-                val constructionResult = MessageConstructionHelper.constructMessages(
-                    uiState = uiState,
-                    authorMe = authorMe,
+                // Construct Messages via domain use case（下沉到 domain 层）
+                val constructionResult = constructMessagesUseCase(
+                    sessionId = sessionId,
                     inputContent = inputContent,
                     isAutoTriggered = isAutoTriggered,
-                    retrieveKnowledge = retrieveKnowledge,
-                    context = context,
-                    getHistoryMessagesUseCase = getHistoryMessagesUseCase,
-                    sessionId = sessionId,
-                    computeEmbeddingUseCase = computeEmbeddingUseCase,
-                    searchEmbeddingUseCase = searchEmbeddingUseCase,
-                    topK = embeddingTopK
+                    retrieveKnowledge = retrieveKnowledge
                 )
-                
-                val messagesToSend = constructionResult.messages
+
+                val historyChat: List<ChatDataItem> = constructionResult.history
+                val userMessage: ChatDataItem = constructionResult.userMessage
                 val computedEmbedding = constructionResult.computedEmbedding
 
                 val params = TextGenerationParams(
@@ -406,56 +397,32 @@ class ConversationLogic(
                     maxTokens = uiState.maxTokens
                 )
 
-                val historyChat: List<ChatDataItem> = messagesToSend.dropLast(1).map { message ->
-                    MessageConstructionHelper.toChatDataItem(message)
+                // 使用 ChatDataItem 构造日志所需的 UIMessage（仅用于日志打印）
+                val messagesToSendForLog = (historyChat + userMessage).map {
+                    val role = when (it.role.lowercase()) {
+                        "assistant" -> MessageRole.ASSISTANT
+                        "system" -> MessageRole.SYSTEM
+                        "tool" -> MessageRole.TOOL
+                        else -> MessageRole.USER
+                    }
+                    com.example.star.aiwork.ui.ai.UIMessage(
+                        role = role,
+                        parts = listOf(
+                            com.example.star.aiwork.ui.ai.UIMessagePart.Text(it.content)
+                        )
+                    )
                 }
-                val userMessage: ChatDataItem = MessageConstructionHelper.toChatDataItem(messagesToSend.last())
 
                 logAllMessagesToSend(
                     sessionId = sessionId,
                     model = model,
                     params = params,
-                    messagesToSend = messagesToSend,
+                    messagesToSend = messagesToSendForLog,
                     historyChat = historyChat,
                     userMessage = userMessage,
                     isAutoTriggered = isAutoTriggered,
                     loopCount = loopCount
                 )
-
-                // 打印最终发送给模型的完整消息
-                Log.d("ConversationLogic", "=".repeat(100))
-                Log.d("ConversationLogic", "📤 最终发送给模型的消息 (共 ${messagesToSend.size} 条):")
-                Log.d("ConversationLogic", "模型: ${model.modelId}, 会话ID: $sessionId")
-                messagesToSend.forEachIndexed { index, message ->
-                    val roleName = message.role.name
-                    val contentBuilder = StringBuilder()
-                    
-                    message.parts.forEach { part ->
-                        when (part) {
-                            is com.example.star.aiwork.ui.ai.UIMessagePart.Text -> {
-                                val text = part.text
-                                contentBuilder.append(text)
-                            }
-                            is com.example.star.aiwork.ui.ai.UIMessagePart.Image -> {
-                                contentBuilder.append("\n[图片: ${part.url.take(100)}${if (part.url.length > 100) "..." else ""}]")
-                            }
-                            else -> {
-                                contentBuilder.append("\n[其他类型: ${part::class.simpleName}]")
-                            }
-                        }
-                    }
-                    
-                    val content = contentBuilder.toString().trim()
-                    val displayContent = if (content.length > 500) {
-                        content.take(500) + "... [已截断，总长度: ${content.length}]"
-                    } else {
-                        content
-                    }
-                    Log.d("ConversationLogic", "")
-                    Log.d("ConversationLogic", "  [${index + 1}] $roleName:")
-                    Log.d("ConversationLogic", "    $displayContent")
-                }
-                Log.d("ConversationLogic", "=".repeat(100))
 
                 val sendResult = sendMessageUseCase(
                     sessionId = sessionId,
