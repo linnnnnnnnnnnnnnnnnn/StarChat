@@ -273,11 +273,11 @@ class HandleMessageErrorUseCase(
 ### 高优先级（影响架构清晰度）：
 1. `handleBufferFull()` → `ProcessMemoryBufferUseCase`
 2. `handleError()` → `HandleMessageErrorUseCase`
-3. `saveMessageToRepository()` → `SaveSystemMessageUseCase`
 
 ### 中优先级（提升代码复用性）：
 4. `updateMessageInRepository()` → `UpdateMessageUseCase`
 5. `cancelStreaming()` (业务逻辑部分) → `CancelStreamingUseCase`
+对于潜在的长期记忆消息做持久化存储。并让filterMemoryMessageUseCase 自己调用接口获取buffer内容，而不是依靠ui去做注入。
 
 ### 低优先级（代码组织优化）：
 6. `processMessage()` 中的会话管理 → `AutoRenameSessionUseCase`
@@ -291,4 +291,7 @@ class HandleMessageErrorUseCase(
 3. **日志简化**: 下沉到 Domain 层时，减少详细的日志记录
 4. **错误处理**: 确保错误处理逻辑完整且一致
 5. **依赖注入**: 使用依赖注入管理 UseCase 的创建
+
+
+
 
